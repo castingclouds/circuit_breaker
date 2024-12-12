@@ -45,7 +45,7 @@ end
 # Start the function if this file is run directly
 if __FILE__ == $0
   puts "Starting Review Function..."
-  ReviewFunction.new
+  CircuitBreaker::Functions::ReviewFunction.new
   puts "Review Function ready for messages"
   loop { sleep 1 }
 end

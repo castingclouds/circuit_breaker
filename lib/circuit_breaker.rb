@@ -192,12 +192,12 @@ module CircuitBreaker
       @places.transform_values(&:token_count)
     end
 
-    def to_json
+    def to_json(opts = nil)
       {
         places: @places.keys,
         transitions: @transitions.keys,
         marking: marking
-      }.to_json
+      }.to_json(opts)
     end
   end
 end

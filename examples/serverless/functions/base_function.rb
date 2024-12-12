@@ -8,12 +8,16 @@ module CircuitBreaker
       attr_reader :nats, :js
       
       def initialize
-        @nats = Config.nats_connection
-        @js = Config.jetstream
+        @nats = CircuitBreaker::Config.nats_connection
+        @js = CircuitBreaker::Config.jetstream
       end
       
       def subscribe(subject)
-        js.subscribe(subject) do |msg|
+        # Ensure we're subscribed to the right stream
+        stream = 'WORKFLOW_FUNCTIONS'
+        
+        puts "Subscribing to #{subject} on stream #{stream}..."
+        js.subscribe(subject, stream: stream) do |msg|
           begin
             handle_message(msg)
           rescue StandardError => e

@@ -47,7 +47,7 @@ end
 # Start the function if this file is run directly
 if __FILE__ == $0
   puts "Starting Approval Function..."
-  ApprovalFunction.new
+  CircuitBreaker::Functions::ApprovalFunction.new
   puts "Approval Function ready for messages"
   loop { sleep 1 }
 end

@@ -22,6 +22,7 @@ module CircuitBreaker
 
     def create_workflow(petri_net, workflow_id: nil)
       @workflow_id = workflow_id || SecureRandom.uuid
+      puts "\n[Workflow] Creating new workflow with ID: #{@workflow_id}"
       
       # Store initial workflow state
       @js.publish("workflow.#{@workflow_id}", 
@@ -39,6 +40,7 @@ module CircuitBreaker
 
     def handle_event(msg)
       event = JSON.parse(msg)
+      puts "\n[Event] Received event: #{event['type']}"
       
       case event['type']
       when 'token_added'
@@ -51,6 +53,7 @@ module CircuitBreaker
     end
 
     def handle_token_added(event)
+      puts "\n[Handler] Token added to place: #{event['place']} with data: #{event['data'].inspect}"
       # Publish state change
       @js.publish("state.#{@workflow_id}",
         event.to_json,
@@ -62,6 +65,7 @@ module CircuitBreaker
     end
 
     def handle_transition_fired(event)
+      puts "\n[Handler] Transition fired: #{event['transition']}"
       @js.publish("state.#{@workflow_id}",
         event.to_json,
         headers: { 'Nats-Msg-Type' => 'state.transition_fired' }
@@ -69,6 +73,7 @@ module CircuitBreaker
     end
 
     def handle_workflow_completed(event)
+      puts "\n[Handler] Workflow completed#{event['next_workflow'] ? ' with next workflow configured' : ''}"
       @js.publish("state.#{@workflow_id}",
         event.to_json,
         headers: { 'Nats-Msg-Type' => 'state.completed' }
@@ -127,6 +132,7 @@ module CircuitBreaker
     end
 
     def add_token(place, data = nil)
+      puts "\n[Token] Adding token to place: #{place} with data: #{data.inspect}"
       @js.publish("event.#{@workflow_id}",
         {
           type: 'token_added',
@@ -139,6 +145,7 @@ module CircuitBreaker
     end
 
     def fire_transition(transition_name)
+      puts "\n[Transition] Firing transition: #{transition_name}"
       @js.publish("event.#{@workflow_id}",
         {
           type: 'transition_fired',
@@ -150,12 +157,16 @@ module CircuitBreaker
     end
 
     def complete_workflow(next_workflow = nil)
-      @js.publish("event.#{@workflow_id}",
-        {
-          type: 'workflow_completed',
-          next_workflow: next_workflow,
-          timestamp: Time.now.utc.iso8601
-        }.to_json,
+      puts "\n[Workflow] Completing workflow#{next_workflow ? ' and triggering next workflow' : ''}"
+      event_data = {
+        type: 'workflow_completed',
+        next_workflow: next_workflow,
+        timestamp: Time.now.utc.iso8601
+      }
+      
+      @js.publish(
+        "event.#{@workflow_id}",
+        event_data.to_json,
         headers: { 'Nats-Msg-Type' => 'event.workflow_completed' }
       )
     end

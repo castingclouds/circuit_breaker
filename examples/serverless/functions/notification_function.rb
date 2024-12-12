@@ -43,7 +43,7 @@ end
 # Start the function if this file is run directly
 if __FILE__ == $0
   puts "Starting Notification Function..."
-  NotificationFunction.new
+  CircuitBreaker::Functions::NotificationFunction.new
   puts "Notification Function ready for messages"
   loop { sleep 1 }
 end
