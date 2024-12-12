@@ -1,55 +1,37 @@
 require_relative '../../lib/circuit_breaker'
 require_relative '../../lib/circuit_breaker/nats_executor'
+require_relative '../../lib/circuit_breaker/workflow_dsl'
 
-# Create a new Workflow for change management
-wf = CircuitBreaker::Workflow.new
+# Define the workflow using our DSL
+wf = CircuitBreaker::WorkflowDSL.define do
+  # Define all possible states
+  states :backlog, :sprint_planning, :sprint_backlog,
+        :in_progress, :in_review, :testing, :done
 
-# Define places (states) for the issue workflow
-wf.add_place('backlog')
-wf.add_place('sprint_planning')
-wf.add_place('sprint_backlog')
-wf.add_place('in_progress')
-wf.add_place('in_review')
-wf.add_place('testing')
-wf.add_place('done')
-wf.add_place('blocked')
+  # Define special states that can be entered from multiple places
+  special_states :blocked
 
-# Define transitions between states
-wf.add_transition('move_to_sprint')      # From backlog to sprint planning
-wf.add_transition('plan_issue')          # From sprint planning to sprint backlog
-wf.add_transition('start_work')          # From sprint backlog to in progress
-wf.add_transition('submit_for_review')   # From in progress to in review
-wf.add_transition('approve_review')      # From in review to testing
-wf.add_transition('reject_review')       # From in review back to in progress
-wf.add_transition('pass_testing')        # From testing to done
-wf.add_transition('fail_testing')        # From testing back to in progress
-wf.add_transition('block_issue')         # From any state to blocked
-wf.add_transition('unblock_issue')       # From blocked back to previous state
+  # Define the main flow of the workflow
+  flow from: :backlog,         to: :sprint_planning,  via: :move_to_sprint
+  flow from: :sprint_planning, to: :sprint_backlog,   via: :plan_issue
+  flow from: :sprint_backlog,  to: :in_progress,      via: :start_work
+  flow from: :in_progress,     to: :in_review,        via: :submit_for_review
+  flow from: :in_review,       to: :testing,          via: :approve_review
+  flow from: :testing,         to: :done,             via: :pass_testing
 
-# Connect places and transitions
-wf.connect('backlog', 'move_to_sprint')
-wf.connect('move_to_sprint', 'sprint_planning')
-wf.connect('sprint_planning', 'plan_issue')
-wf.connect('plan_issue', 'sprint_backlog')
-wf.connect('sprint_backlog', 'start_work')
-wf.connect('start_work', 'in_progress')
-wf.connect('in_progress', 'submit_for_review')
-wf.connect('submit_for_review', 'in_review')
-wf.connect('in_review', 'approve_review')
-wf.connect('approve_review', 'testing')
-wf.connect('in_review', 'reject_review')
-wf.connect('reject_review', 'in_progress')
-wf.connect('testing', 'pass_testing')
-wf.connect('pass_testing', 'done')
-wf.connect('testing', 'fail_testing')
-wf.connect('fail_testing', 'in_progress')
+  # Define reverse flows (when work needs to go back)
+  flow from: :in_review,       to: :in_progress,      via: :reject_review
+  flow from: :testing,         to: :in_progress,      via: :fail_testing
 
-# Connect blocking transitions (can happen from multiple states)
-['sprint_backlog', 'in_progress', 'in_review', 'testing'].each do |place|
-  wf.connect(place, 'block_issue')
-  wf.connect('block_issue', 'blocked')
-  wf.connect('blocked', 'unblock_issue')
-  wf.connect('unblock_issue', place)
+  # Define blocking flows that can happen from multiple states
+  multi_flow from: [:sprint_backlog, :in_progress, :in_review, :testing],
+            to: :blocked,
+            via: :block_issue
+
+  # Define unblocking flows that can go back to multiple states
+  multi_flow from: :blocked,
+            to_states: [:sprint_backlog, :in_progress, :in_review, :testing],
+            via: :unblock_issue
 end
 
 # Create NATS executor

@@ -1,10 +1,10 @@
 # Change Management Workflow Example
 
-This example demonstrates how to use Circuit Breaker to implement a change management workflow system that models how issues move through different states in a sprint-based development process.
+This example demonstrates how to use Circuit Breaker's DSL to implement a change management workflow system. The workflow models how issues move through different states in a sprint-based development process, from backlog to production.
 
 ## Overview
 
-The workflow models a typical agile development process where issues move through various states:
+The workflow models a typical agile development process:
 
 ```mermaid
 graph LR
@@ -48,47 +48,77 @@ graph LR
 ```
 change_management/
 ├── README.md                 # This file
-├── change_workflow.rb        # Main workflow definition
+├── change_workflow.rb        # Main workflow definition using DSL
 ├── run_change_workflow.sh    # Script to run the example
 └── functions/               # State transition handlers
     ├── sprint_planning_function.rb
     └── review_function.rb
 ```
 
-## Workflow States
+## Workflow Definition Using DSL
 
-1. **Backlog**
-   - Initial state for all new issues
-   - Issues wait here until selected for a sprint
+The workflow is defined using a readable Domain Specific Language (DSL) that makes it easy to understand and modify the workflow:
 
-2. **Sprint Planning**
-   - Issues are estimated and prioritized
-   - Story points are assigned
-   - Sprint goals are set
+```ruby
+CircuitBreaker::WorkflowDSL.define do
+  # Define all possible states
+  states :backlog, :sprint_planning, :sprint_backlog,
+        :in_progress, :in_review, :testing, :done
 
-3. **Sprint Backlog**
-   - Issues ready to be worked on in the current sprint
-   - Prioritized and fully specified
+  # Define special states that can be entered from multiple places
+  special_states :blocked
 
-4. **In Progress**
-   - Active development work happening
-   - Can be blocked if dependencies arise
+  # Define the main flow of the workflow
+  flow from: :backlog,         to: :sprint_planning,  via: :move_to_sprint
+  flow from: :sprint_planning, to: :sprint_backlog,   via: :plan_issue
+  flow from: :sprint_backlog,  to: :in_progress,      via: :start_work
+  flow from: :in_progress,     to: :in_review,        via: :submit_for_review
+  flow from: :in_review,       to: :testing,          via: :approve_review
+  flow from: :testing,         to: :done,             via: :pass_testing
 
-5. **In Review**
-   - Code review in progress
-   - Can be approved or sent back for changes
+  # Define reverse flows (when work needs to go back)
+  flow from: :in_review,       to: :in_progress,      via: :reject_review
+  flow from: :testing,         to: :in_progress,      via: :fail_testing
 
-6. **Testing**
-   - QA and automated testing
-   - Can pass and move to done, or fail and return to in progress
+  # Define blocking flows that can happen from multiple states
+  multi_flow from: [:sprint_backlog, :in_progress, :in_review, :testing],
+            to: :blocked,
+            via: :block_issue
 
-7. **Done**
-   - Issue is complete and deployed
-   - All acceptance criteria met
+  # Define unblocking flows
+  multi_flow from: :blocked,
+            to_states: [:sprint_backlog, :in_progress, :in_review, :testing],
+            via: :unblock_issue
+end
+```
 
-8. **Blocked**
-   - Special state that can be entered from any active state
-   - Issues can return to their previous state when unblocked
+### DSL Components
+
+1. **State Definition**
+   ```ruby
+   # Regular states
+   states :backlog, :sprint_planning, :sprint_backlog
+   
+   # Special states (can be entered from multiple places)
+   special_states :blocked
+   ```
+
+2. **Simple Flow Definition**
+   ```ruby
+   flow from: :backlog, to: :sprint_planning, via: :move_to_sprint
+   ```
+   - `from`: Source state
+   - `to`: Target state
+   - `via`: Name of the transition
+
+3. **Multi-State Transitions**
+   ```ruby
+   multi_flow from: [:sprint_backlog, :in_progress],
+             to: :blocked,
+             via: :block_issue
+   ```
+   - Handles transitions that can happen from multiple states
+   - Or transitions that can go to multiple states
 
 ## Running the Example
 
@@ -106,64 +136,65 @@ change_management/
 2. Watch the workflow progress through the console output
 3. Press Ctrl+C to stop all workers and exit
 
-## Function Workers
+## Extending the Workflow
 
-### Sprint Planning Function
-- Handles moving issues from backlog to sprint
-- Implements:
-  - Story point estimation
-  - Sprint assignment
-  - Priority updates
-  - Sprint goal setting
+### 1. Adding New States and Flows
 
-### Review Function
-- Manages the code review process
-- Features:
-  - Code quality metrics tracking
-  - Automated test verification
-  - Review comment management
-  - Approval/rejection decisions
+```ruby
+CircuitBreaker::WorkflowDSL.define do
+  # Add deployment states
+  states :deployment_ready, :in_production
+  
+  # Add deployment flows
+  flow from: :done,             to: :deployment_ready, via: :prepare_deploy
+  flow from: :deployment_ready, to: :in_production,    via: :deploy
+  
+  # Add rollback flow
+  flow from: :in_production,    to: :deployment_ready, via: :rollback
+end
+```
 
-## Extending the Example
+### 2. Adding Complex State Management
 
-You can extend this example in several ways:
+```ruby
+CircuitBreaker::WorkflowDSL.define do
+  # Add states for different environments
+  states :dev_ready, :staging_ready, :prod_ready
+  
+  # Add validation states
+  special_states :needs_security_review, :pending_approval
+  
+  # Define environment progression
+  flow from: :done,        to: :dev_ready,      via: :deploy_to_dev
+  flow from: :dev_ready,   to: :staging_ready,  via: :promote_to_staging
+  flow from: :staging_ready, to: :prod_ready,   via: :promote_to_prod
+  
+  # Define validation flows
+  multi_flow from: [:dev_ready, :staging_ready, :prod_ready],
+            to: :needs_security_review,
+            via: :request_security_review
+end
+```
 
-1. **Add More Functions**
-   - Testing function for automated QA
-   - Deployment function for production releases
-   - Metrics collection function for analytics
+### 3. Adding State Metadata (Coming Soon)
 
-2. **Add New State Transitions**
-   ```ruby
-   # In change_workflow.rb
-   wf.add_transition('cancel_issue')
-   wf.add_transition('postpone_to_next_sprint')
-   ```
-
-3. **Integrate with External Systems**
-   ```ruby
-   # Example integration with JIRA
-   def update_jira_status(issue_id, status)
-     # Integration code here
-   end
-   ```
-
-4. **Add Complex Business Rules**
-   ```ruby
-   # Example: Require two approvals for high-priority issues
-   def can_approve?(issue)
-     return issue.approvals.count >= 2 if issue.priority == 'high'
-     return issue.approvals.count >= 1
-   end
-   ```
-
-5. **Implement Metrics Collection**
-   ```ruby
-   # Example: Track time in each state
-   def track_state_duration(issue, state)
-     # Metrics collection code here
-   end
-   ```
+```ruby
+CircuitBreaker::WorkflowDSL.define do
+  # Define states with metadata
+  state :in_review,
+    description: "Code review in progress",
+    required_approvals: 2,
+    notify: [:team_lead, :qa_team],
+    metrics: [:time_in_review, :approval_count]
+    
+  # Define transitions with guards
+  flow from: :testing, to: :done, via: :pass_testing do
+    guard { |issue| issue.tests_passing? && issue.security_scan_passed? }
+    notify :deployment_team
+    track_metric :time_to_completion
+  end
+end
+```
 
 ## Troubleshooting
 
@@ -178,10 +209,14 @@ You can extend this example in several ways:
    - Ensure proper file permissions
 
 3. **State Transition Errors**
-   - Check workflow definition for valid connections
-   - Verify all required functions are running
-   - Review event stream for missing handlers
+   - Verify state names in DSL match worker configurations
+   - Check for typos in state or transition names
+   - Ensure all required functions are running
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests!
+Feel free to submit issues and enhancement requests! Some areas for contribution:
+- Additional DSL features
+- New state transition handlers
+- Integration with external systems
+- Workflow templates for common patterns
