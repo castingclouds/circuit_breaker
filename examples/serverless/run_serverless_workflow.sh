@@ -41,8 +41,8 @@ ensure_nats_running
 
 # Start all function workers
 echo "Starting function workers..."
-for worker in serverless/functions/*_function.rb; do
-    if [ -f "$worker" ] && [ "$worker" != "serverless/functions/base_function.rb" ]; then
+for worker in functions/*_function.rb; do
+    if [ -f "$worker" ] && [ "$worker" != "functions/base_function.rb" ]; then
         run_worker "$worker"
         sleep 1  # Give each worker time to initialize
     fi
