@@ -2,36 +2,36 @@ require_relative '../lib/circuit_breaker'
 require_relative '../lib/circuit_breaker/nats_executor'
 
 # Create a new Workflow for an approval workflow
-net = CircuitBreaker::Workflow.new
+wf = CircuitBreaker::Workflow.new
 
 # Define places (states)
-net.add_place('document_submitted')
-net.add_place('pending_review')
-net.add_place('reviewed')
-net.add_place('approved')
-net.add_place('rejected')
+wf.add_place('document_submitted')
+wf.add_place('pending_review')
+wf.add_place('reviewed')
+wf.add_place('approved')
+wf.add_place('rejected')
 
 # Define transitions
-net.add_transition('start_review')
-net.add_transition('complete_review')
-net.add_transition('approve')
-net.add_transition('reject')
+wf.add_transition('start_review')
+wf.add_transition('complete_review')
+wf.add_transition('approve')
+wf.add_transition('reject')
 
 # Connect places and transitions
-net.connect('document_submitted', 'start_review')
-net.connect('start_review', 'pending_review')
-net.connect('pending_review', 'complete_review')
-net.connect('complete_review', 'reviewed')
-net.connect('reviewed', 'approve')
-net.connect('approve', 'approved')
-net.connect('reviewed', 'reject')
-net.connect('reject', 'rejected')
+wf.connect('document_submitted', 'start_review')
+wf.connect('start_review', 'pending_review')
+wf.connect('pending_review', 'complete_review')
+wf.connect('complete_review', 'reviewed')
+wf.connect('reviewed', 'approve')
+wf.connect('approve', 'approved')
+wf.connect('reviewed', 'reject')
+wf.connect('reject', 'rejected')
 
 # Create NATS executor
 executor = CircuitBreaker::NatsExecutor.new
 
 # Start the workflow
-workflow_id = executor.create_workflow(net)
+workflow_id = executor.create_workflow(wf)
 puts "Created workflow: #{workflow_id}"
 
 # Add initial token

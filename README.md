@@ -22,29 +22,29 @@ Petri Nets provide a formal mathematical model that naturally represents these c
 ### 1. Places (States)
 Places represent possible states in your workflow:
 ```ruby
-net.add_place('draft')
-net.add_place('pending_review')
-net.add_place('approved')
+wf.add_place('draft')
+wf.add_place('pending_review')
+wf.add_place('approved')
 ```
 
 ### 2. Transitions
 Transitions represent actions that change states:
 ```ruby
-net.add_transition('submit')
-net.add_transition('approve')
+wf.add_transition('submit')
+wf.add_transition('approve')
 ```
 
 ### 3. Tokens
 Tokens mark the current state(s) of your workflow:
 ```ruby
-net.add_tokens('draft')  # Start workflow in draft state
+wf.add_tokens('draft')  # Start workflow in draft state
 ```
 
 ### 4. Arcs
 Arcs connect places to transitions and vice versa:
 ```ruby
-net.connect('draft', 'submit')        # Place to transition
-net.connect('submit', 'under_review') # Transition to place
+wf.connect('draft', 'submit')        # Place to transition
+wf.connect('submit', 'under_review') # Transition to place
 ```
 
 ### 5. Guard Conditions
@@ -124,27 +124,27 @@ In **Circuit Breaker**, workflows are modeled as Petri Nets where:
 The same approval workflow in Petri Nets looks quite different:
 ```ruby
 # States (Places)
-net.add_place('draft')
-net.add_place('pending_review')
-net.add_place('reviewed')
-net.add_place('approved')
-net.add_place('rejected')
+wf.add_place('draft')
+wf.add_place('pending_review')
+wf.add_place('reviewed')
+wf.add_place('approved')
+wf.add_place('rejected')
 
 # Actions (Transitions)
-net.add_transition('submit')
-net.add_transition('review')
-net.add_transition('approve')
-net.add_transition('reject')
+wf.add_transition('submit')
+wf.add_transition('review')
+wf.add_transition('approve')
+wf.add_transition('reject')
 
 # Flow (Arcs)
-net.connect('draft', 'submit')
-net.connect('submit', 'pending_review')
-net.connect('pending_review', 'review')
-net.connect('review', 'reviewed')
-net.connect('reviewed', 'approve')
-net.connect('approve', 'approved')
-net.connect('reviewed', 'reject')
-net.connect('reject', 'rejected')
+wf.connect('draft', 'submit')
+wf.connect('submit', 'pending_review')
+wf.connect('pending_review', 'review')
+wf.connect('review', 'reviewed')
+wf.connect('reviewed', 'approve')
+wf.connect('approve', 'approved')
+wf.connect('reviewed', 'reject')
+wf.connect('reject', 'rejected')
 ```
 
 ### Key Differences
@@ -175,8 +175,8 @@ Let's walk through how our example approval workflow works using Petri Nets:
 
 ### 1. Initial State
 ```ruby
-net.add_tokens('draft')
-puts net.marking
+wf.add_tokens('draft')
+puts wf.marking
 # => {"draft"=>1, "pending_review"=>0, "reviewed"=>0, "approved"=>0, "rejected"=>0}
 ```
 - System starts with one token in the 'draft' state
@@ -184,8 +184,8 @@ puts net.marking
 
 ### 2. Submit Transition
 ```ruby
-net.step  # Fires 'submit' transition
-puts net.marking
+wf.step  # Fires 'submit' transition
+puts wf.marking
 # => {"draft"=>0, "pending_review"=>1, "reviewed"=>0, "approved"=>0, "rejected"=>0}
 ```
 - Token moves from 'draft' to 'pending_review'
@@ -194,8 +194,8 @@ puts net.marking
 
 ### 3. Review Transition
 ```ruby
-net.step  # Fires 'review' transition
-puts net.marking
+wf.step  # Fires 'review' transition
+puts wf.marking
 # => {"draft"=>0, "pending_review"=>0, "reviewed"=>1, "approved"=>0, "rejected"=>0}
 ```
 - Token moves from 'pending_review' to 'reviewed'
@@ -207,8 +207,8 @@ puts net.marking
 approve.set_guard { true }   # Always approve
 reject.set_guard { false }   # Never reject
 
-net.step  # Fires 'approve' transition
-puts net.marking
+wf.step  # Fires 'approve' transition
+puts wf.marking
 # => {"draft"=>0, "pending_review"=>0, "reviewed"=>0, "approved"=>1, "rejected"=>0}
 ```
 - Token moves from 'reviewed' to 'approved'
@@ -222,13 +222,13 @@ Petri Nets excel at modeling complex patterns that are difficult with DAGs:
 1. **Reentrant Workflows**
 ```ruby
 # Allow resubmission from rejected state
-net.connect('rejected', 'submit')
+wf.connect('rejected', 'submit')
 ```
 
 2. **Parallel Reviews**
 ```ruby
 # Add multiple tokens for parallel reviews
-net.add_tokens('pending_review', 3)
+wf.add_tokens('pending_review', 3)
 ```
 
 3. **Synchronization Points**
@@ -256,36 +256,36 @@ These patterns demonstrate how Petri Nets can naturally model complex state-base
 require_relative 'lib/circuit_breaker'
 
 # Create a new Petri Net
-net = CircuitBreaker::Workflow.new
+wf = CircuitBreaker::Workflow.new
 
 # Define states (places)
 ['draft', 'pending_review', 'reviewed', 'approved', 'rejected'].each do |place|
-  net.add_place(place)
+  wf.add_place(place)
 end
 
 # Define state transitions
 ['submit', 'review', 'approve', 'reject'].each do |transition|
-  net.add_transition(transition)
+  wf.add_transition(transition)
 end
 
 # Connect states and transitions
-net.connect('draft', 'submit')
-net.connect('submit', 'pending_review')
-net.connect('pending_review', 'review')
-net.connect('review', 'reviewed')
+wf.connect('draft', 'submit')
+wf.connect('submit', 'pending_review')
+wf.connect('pending_review', 'review')
+wf.connect('review', 'reviewed')
 
 # Add guard conditions
-approve = net.transitions['approve']
+approve = wf.transitions['approve']
 approve.set_guard do
   # Add your approval logic here
   true
 end
 
 # Start the workflow
-net.add_tokens('draft')
+wf.add_tokens('draft')
 
 # Run the workflow
-net.run_to_completion
+wf.run_to_completion
 ```
 
 ## Differences from Argo Workflows

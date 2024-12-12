@@ -1,58 +1,58 @@
 require_relative '../lib/circuit_breaker'
 
 # Create a simple approval workflow using Petri nets
-net = CircuitBreaker::Workflow.new
+wf = CircuitBreaker::Workflow.new
 
 # Define places (states)
 ['draft', 'pending_review', 'reviewed', 'approved', 'rejected'].each do |place|
-  net.add_place(place)
+  wf.add_place(place)
 end
 
 # Define transitions
 ['submit', 'review', 'approve', 'reject'].each do |transition|
-  net.add_transition(transition)
+  wf.add_transition(transition)
 end
 
 # Connect places and transitions with proper flow
 # draft -> submit -> pending_review
-net.connect('draft', 'submit')
-net.connect('submit', 'pending_review')
+wf.connect('draft', 'submit')
+wf.connect('submit', 'pending_review')
 
 # pending_review -> review -> reviewed
-net.connect('pending_review', 'review')
-net.connect('review', 'reviewed')
+wf.connect('pending_review', 'review')
+wf.connect('review', 'reviewed')
 
 # reviewed -> approve -> approved
-net.connect('reviewed', 'approve')
-net.connect('approve', 'approved')
+wf.connect('reviewed', 'approve')
+wf.connect('approve', 'approved')
 
 # reviewed -> reject -> rejected
-net.connect('reviewed', 'reject')
-net.connect('reject', 'rejected')
+wf.connect('reviewed', 'reject')
+wf.connect('reject', 'rejected')
 
 # Add guard conditions
-approve = net.transitions['approve']
+approve = wf.transitions['approve']
 approve.set_guard do
   # Example guard condition - could check user permissions, etc.
   true
 end
 
-reject = net.transitions['reject']
+reject = wf.transitions['reject']
 reject.set_guard do
   # Example guard condition - could check rejection criteria
   false  # For this example, always take the approve path
 end
 
 # Start the workflow
-net.add_tokens('draft')
+wf.add_tokens('draft')
 
 # Run the workflow step by step
-puts "Initial marking: #{net.marking}"
+puts "Initial marking: #{wf.marking}"
 
 # Each step should fire exactly one transition if enabled
 3.times do |i|
-  if net.step
-    puts "Step #{i + 1} marking: #{net.marking}"
+  if wf.step
+    puts "Step #{i + 1} marking: #{wf.marking}"
   else
     puts "No transitions enabled at step #{i + 1}"
     break
