@@ -2,7 +2,7 @@ require 'concurrent'
 require 'json'
 require 'securerandom'
 
-module PetriWorkflows
+module CircuitBreaker
   class Token
     attr_reader :id, :data
     
@@ -115,7 +115,7 @@ module PetriWorkflows
     end
   end
 
-  class PetriNet
+  class Workflow
     attr_reader :places, :transitions
 
     def initialize

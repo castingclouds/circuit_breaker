@@ -1,6 +1,6 @@
 require_relative 'base_function'
 
-module PetriWorkflow
+module CircuitBreaker
   module Functions
     class NotificationFunction < BaseFunction
       def initialize

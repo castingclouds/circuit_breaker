@@ -1,4 +1,4 @@
-# Petri Workflows
+# Circuit Breaker
 
 A Ruby implementation of workflow orchestration using Petri Nets, designed as an alternative approach to Argo Workflows' DAG-based system. This project explores modeling workflows through states and transitions rather than tasks, offering a more natural way to represent complex state-based processes.
 
@@ -112,7 +112,7 @@ spec:
 ```
 
 ### Petri Nets
-In Petri Workflows, workflows are modeled as Petri Nets where:
+In **Circuit Breaker**, workflows are modeled as Petri Nets where:
 - Places represent **states** of the system
 - Transitions represent **actions** that change states
 - Tokens represent **current state markers**
@@ -253,10 +253,10 @@ These patterns demonstrate how Petri Nets can naturally model complex state-base
 ## Example Usage
 
 ```ruby
-require_relative 'lib/petri_workflow'
+require_relative 'lib/circuit_breaker'
 
 # Create a new Petri Net
-net = PetriWorkflows::PetriNet.new
+net = CircuitBreaker::Workflow.new
 
 # Define states (places)
 ['draft', 'pending_review', 'reviewed', 'approved', 'rejected'].each do |place|
@@ -310,7 +310,7 @@ net.run_to_completion
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/petri-workflows.git
+git clone https://github.com/yourusername/circuit_breaker.git
 ```
 
 2. Install dependencies:

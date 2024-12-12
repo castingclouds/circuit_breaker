@@ -1,8 +1,8 @@
-require_relative '../lib/petri_workflow'
-require_relative '../lib/petri_workflow/nats_executor'
+require_relative '../lib/circuit_breaker'
+require_relative '../lib/circuit_breaker/nats_executor'
 
-# Create a new Petri Net for an approval workflow
-net = PetriWorkflow::PetriNet.new
+# Create a new Workflow for an approval workflow
+net = CircuitBreaker::Workflow.new
 
 # Define places (states)
 net.add_place('document_submitted')
@@ -28,7 +28,7 @@ net.connect('reviewed', 'reject')
 net.connect('reject', 'rejected')
 
 # Create NATS executor
-executor = PetriWorkflow::NatsExecutor.new
+executor = CircuitBreaker::NatsExecutor.new
 
 # Start the workflow
 workflow_id = executor.create_workflow(net)
@@ -39,12 +39,12 @@ executor.add_token('document_submitted', { document_id: '123', user: 'john.doe' 
 
 # Example of chaining workflows
 next_workflow_config = {
-  'petri_net' => PetriWorkflow::PetriNet.new.tap do |petri_net|
-    petri_net.add_place('notification_pending')
-    petri_net.add_place('notification_sent')
-    petri_net.add_transition('send_notification')
-    petri_net.connect('notification_pending', 'send_notification')
-    petri_net.connect('send_notification', 'notification_sent')
+  'workflow' => CircuitBreaker::Workflow.new.tap do |workflow|
+    workflow.add_place('notification_pending')
+    workflow.add_place('notification_sent')
+    workflow.add_transition('send_notification')
+    workflow.connect('notification_pending', 'send_notification')
+    workflow.connect('send_notification', 'notification_sent')
   end,
   'initial_place' => 'notification_pending'
 }

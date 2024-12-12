@@ -2,7 +2,7 @@ require 'nats/client'
 require 'json'
 require_relative '../config/nats_config'
 
-module PetriWorkflow
+module CircuitBreaker
   module Functions
     class BaseFunction
       attr_reader :nats, :js

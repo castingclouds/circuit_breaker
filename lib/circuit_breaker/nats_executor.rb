@@ -2,7 +2,7 @@ require 'nats/client'
 require 'securerandom'
 require 'json'
 
-module PetriWorkflow
+module CircuitBreaker
   class NatsExecutor
     attr_reader :workflow_id, :nats
 

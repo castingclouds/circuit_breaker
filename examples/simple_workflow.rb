@@ -1,7 +1,7 @@
-require_relative '../lib/petri_workflow'
+require_relative '../lib/circuit_breaker'
 
 # Create a simple approval workflow using Petri nets
-net = PetriWorkflows::PetriNet.new
+net = CircuitBreaker::Workflow.new
 
 # Define places (states)
 ['draft', 'pending_review', 'reviewed', 'approved', 'rejected'].each do |place|
