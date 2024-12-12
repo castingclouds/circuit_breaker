@@ -310,7 +310,7 @@ wf.run_to_completion
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/circuit_breaker.git
+git clone https://github.com/castingclouds/circuit_breaker.git
 ```
 
 2. Install dependencies:
