@@ -1,0 +1,127 @@
+nodes:
+  - id: '1'
+    type: input
+    data:
+      label: Backlog
+      description: All incoming issues start here
+    position:
+      x: 250
+      y: 0
+
+  - id: '2'
+    data:
+      label: Sprint Planning
+      description: Prioritize and assign issues
+    position:
+      x: 250
+      y: 100
+
+  - id: '3'
+    data:
+      label: Sprint Backlog
+      description: Issues selected for current sprint
+    position:
+      x: 250
+      y: 200
+
+  - id: '4'
+    data:
+      label: In Progress
+      description: Currently being worked on
+    position:
+      x: 250
+      y: 300
+
+  - id: '5'
+    data:
+      label: In Review
+      description: Pending code review
+    position:
+      x: 250
+      y: 400
+
+  - id: '6'
+    data:
+      label: Testing
+      description: Undergoing QA testing
+    position:
+      x: 250
+      y: 500
+
+  - id: '7'
+    type: output
+    data:
+      label: Done
+      description: Successfully completed
+    position:
+      x: 250
+      y: 600
+
+  - id: '8'
+    data:
+      label: Blocked
+      description: Blocked by dependency or issue
+    position:
+      x: 100
+      y: 300
+    customStyle:
+      backgroundColor: '#fff1f0'
+
+edges:
+  - id: e1-2
+    source: '1'
+    target: '2'
+    label: Move to Sprint
+
+  - id: e2-3
+    source: '2'
+    target: '3'
+    label: Plan Issue
+
+  - id: e3-4
+    source: '3'
+    target: '4'
+    label: Start Work
+
+  - id: e4-5
+    source: '4'
+    target: '5'
+    label: Submit for Review
+
+  - id: e5-6
+    source: '5'
+    target: '6'
+    label: Approve Review
+
+  - id: e6-7
+    source: '6'
+    target: '7'
+    label: Completed
+
+styles:
+  node:
+    padding: 20
+    borderRadius: 8
+    border: '1px solid #e1e4e8'
+    backgroundColor: '#ffffff'
+    width: 180
+    fontSize: 14
+    color: '#1a1a1a'
+    fontWeight: 500
+    transition: 'all 0.2s ease'
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+  
+  edge:
+    stroke: '#b1b5c3'
+    strokeWidth: 2
+    transition: 'all 0.2s ease'
+    labelBgPadding: [8, 12]
+    labelBgStyle:
+      fill: '#ffffff'
+      stroke: '#e1e4e8'
+      strokeWidth: 1
+      borderRadius: 4
+    labelStyle:
+      fontSize: 12
+      fill: '#4b5563'
+      fontWeight: 500
