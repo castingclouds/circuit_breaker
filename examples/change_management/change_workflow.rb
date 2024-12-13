@@ -156,7 +156,7 @@ end
 
 # Try to load the YAML configuration first
 yaml_path = File.join(__dir__, 'change_workflow.yml')
-workflow = if File.exist?(yaml_path)
+workflow_config = if File.exist?(yaml_path)
   puts "Using YAML configuration from #{yaml_path}"
   CircuitBreaker::WorkflowDSL.load_yaml(yaml_path)
 else
@@ -269,7 +269,7 @@ issue = Issue.create do |i|
 end
 
 # Create and start the workflow with the issue object
-workflow_instance = CircuitBreaker::Workflow.new(workflow)
+workflow_instance = CircuitBreaker::Workflow.new(workflow_config)
 workflow_instance.start(issue)
 
 # Example of moving the issue through the workflow with the new DSL

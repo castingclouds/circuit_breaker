@@ -1,17 +1,96 @@
 ---
 object_type: Issue
 
-states:
-  - backlog
-  - sprint_planning
-  - sprint_backlog
-  - in_progress
-  - in_review
-  - testing
-  - done
+places:
+  states:
+    - backlog
+    - sprint_planning
+    - sprint_backlog
+    - in_progress
+    - in_review
+    - testing
+    - done
+  special_states:
+    - blocked
 
-special_states:
-  - blocked
+transitions:
+  regular:
+    # Main flow
+    - name: move_to_sprint
+      from: backlog
+      to: sprint_planning
+      requires:
+        - description
+        - priority
+
+    - name: plan_issue
+      from: sprint_planning
+      to: sprint_backlog
+      requires:
+        - story_points
+        - sprint
+
+    - name: start_work
+      from: sprint_backlog
+      to: in_progress
+      requires:
+        - assignee
+
+    - name: submit_for_review
+      from: in_progress
+      to: in_review
+      requires:
+        - pull_request_url
+
+    - name: approve_review
+      from: in_review
+      to: testing
+      requires:
+        - review_approvals
+        - test_coverage
+
+    - name: pass_testing
+      from: testing
+      to: done
+      requires:
+        - qa_approved
+        - deployment_approved
+
+    # Reverse flows
+    - name: reject_review
+      from: in_review
+      to: in_progress
+      requires:
+        - review_comments
+
+    - name: fail_testing
+      from: testing
+      to: in_progress
+      requires:
+        - test_failure_reason
+
+  blocking:
+    # Blocking flows
+    - name: block_issue
+      from: 
+        - sprint_backlog
+        - in_progress
+        - in_review
+        - testing
+      to: blocked
+      requires:
+        - blocking_reason
+
+    # Unblocking flows
+    - name: unblock_issue
+      from: blocked
+      to:
+        - sprint_backlog
+        - in_progress
+        - in_review
+        - testing
+      requires:
+        - unblocking_reason
 
 validations:
   - state: sprint_planning
@@ -39,83 +118,6 @@ validations:
         min_value: 80
       - field: qa_approved
         required: true
-
-transitions:
-  # Main flow
-  - from: backlog
-    to: sprint_planning
-    via: move_to_sprint
-    requires:
-      - description
-      - priority
-
-  - from: sprint_planning
-    to: sprint_backlog
-    via: plan_issue
-    requires:
-      - story_points
-      - sprint
-
-  - from: sprint_backlog
-    to: in_progress
-    via: start_work
-    requires:
-      - assignee
-
-  - from: in_progress
-    to: in_review
-    via: submit_for_review
-    requires:
-      - pull_request_url
-
-  - from: in_review
-    to: testing
-    via: approve_review
-    requires:
-      - review_approvals
-      - test_coverage
-
-  - from: testing
-    to: done
-    via: pass_testing
-    requires:
-      - qa_approved
-      - deployment_approved
-
-  # Reverse flows
-  - from: in_review
-    to: in_progress
-    via: reject_review
-    requires:
-      - review_comments
-
-  - from: testing
-    to: in_progress
-    via: fail_testing
-    requires:
-      - test_failure_reason
-
-  # Blocking flows
-  - from: 
-      - sprint_backlog
-      - in_progress
-      - in_review
-      - testing
-    to: blocked
-    via: block_issue
-    requires:
-      - blocking_reason
-
-  # Unblocking flows
-  - from: blocked
-    to_states:
-      - sprint_backlog
-      - in_progress
-      - in_review
-      - testing
-    via: unblock_issue
-    requires:
-      - unblocking_reason
 
 config:
   nats_url: nats://localhost:4222
