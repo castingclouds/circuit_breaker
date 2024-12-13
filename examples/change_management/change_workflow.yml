@@ -1,0 +1,132 @@
+---
+object_type: Issue
+
+states:
+  - backlog
+  - sprint_planning
+  - sprint_backlog
+  - in_progress
+  - in_review
+  - testing
+  - done
+
+special_states:
+  - blocked
+
+validations:
+  - state: sprint_planning
+    conditions:
+      - field: description
+        required: true
+      - field: assignee
+        required: true
+  
+  - state: in_progress
+    conditions:
+      - field: story_points
+        required: true
+      - field: sprint
+        required: true
+  
+  - state: in_review
+    conditions:
+      - field: pull_request_url
+        required: true
+  
+  - state: testing
+    conditions:
+      - field: test_coverage
+        min_value: 80
+      - field: qa_approved
+        required: true
+
+transitions:
+  # Main flow
+  - from: backlog
+    to: sprint_planning
+    via: move_to_sprint
+    requires:
+      - description
+      - priority
+
+  - from: sprint_planning
+    to: sprint_backlog
+    via: plan_issue
+    requires:
+      - story_points
+      - sprint
+
+  - from: sprint_backlog
+    to: in_progress
+    via: start_work
+    requires:
+      - assignee
+
+  - from: in_progress
+    to: in_review
+    via: submit_for_review
+    requires:
+      - pull_request_url
+
+  - from: in_review
+    to: testing
+    via: approve_review
+    requires:
+      - review_approvals
+      - test_coverage
+
+  - from: testing
+    to: done
+    via: pass_testing
+    requires:
+      - qa_approved
+      - deployment_approved
+
+  # Reverse flows
+  - from: in_review
+    to: in_progress
+    via: reject_review
+    requires:
+      - review_comments
+
+  - from: testing
+    to: in_progress
+    via: fail_testing
+    requires:
+      - test_failure_reason
+
+  # Blocking flows
+  - from: 
+      - sprint_backlog
+      - in_progress
+      - in_review
+      - testing
+    to: blocked
+    via: block_issue
+    requires:
+      - blocking_reason
+
+  # Unblocking flows
+  - from: blocked
+    to_states:
+      - sprint_backlog
+      - in_progress
+      - in_review
+      - testing
+    via: unblock_issue
+    requires:
+      - unblocking_reason
+
+config:
+  nats_url: nats://localhost:4222
+  log_level: info
+  metrics_enabled: true
+  retry_attempts: 3
+  metrics_options:
+    prometheus_port: 9090
+    labels:
+      app: change_management
+      env: development
+  log_options:
+    format: json
+    output: stdout
