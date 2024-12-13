@@ -2,15 +2,25 @@ require 'nats/client'
 require 'securerandom'
 require 'json'
 
+# CircuitBreaker module for workflow management
 module CircuitBreaker
+  # Executor class that uses NATS for workflow event distribution
+  # Handles workflow state management and event processing
   class NatsExecutor
-    attr_reader :workflow_id, :nats
+    # Reader for workflow ID
+    attr_reader :workflow_id
+    # Reader for NATS client
+    attr_reader :nats
 
+    # Initialize a new NATS executor
+    # @param nats_url [String] URL of the NATS server
     def initialize(nats_url: 'nats://localhost:4222')
       @nats = NATS.connect(nats_url)
       setup_jetstream
     end
 
+    # Set up JetStream streams for workflow data
+    # Creates streams for workflow state, events, and current states
     def setup_jetstream
       @js = @nats.jetstream
       
@@ -20,6 +30,10 @@ module CircuitBreaker
       @js.add_stream(name: 'WORKFLOW_STATES', subjects: ['state.*'])
     end
 
+    # Create a new workflow instance
+    # @param petri_net [Workflow] Workflow definition
+    # @param workflow_id [String, nil] Optional workflow ID
+    # @return [String] Workflow ID
     def create_workflow(petri_net, workflow_id: nil)
       @workflow_id = workflow_id || SecureRandom.uuid
       puts "\n[Workflow] Creating new workflow with ID: #{@workflow_id}"
@@ -38,6 +52,8 @@ module CircuitBreaker
       @workflow_id
     end
 
+    # Handle incoming workflow events
+    # @param msg [String] JSON-encoded event message
     def handle_event(msg)
       event = JSON.parse(msg)
       puts "\n[Event] Received event: #{event['type']}"
@@ -52,6 +68,8 @@ module CircuitBreaker
       end
     end
 
+    # Handle token added event
+    # @param event [Hash] Event data
     def handle_token_added(event)
       puts "\n[Handler] Token added to place: #{event['place']} with data: #{event['data'].inspect}"
       # Publish state change
@@ -64,6 +82,8 @@ module CircuitBreaker
       check_and_trigger_functions(event['place'])
     end
 
+    # Handle transition fired event
+    # @param event [Hash] Event data
     def handle_transition_fired(event)
       puts "\n[Handler] Transition fired: #{event['transition']}"
       @js.publish("state.#{@workflow_id}",
@@ -72,6 +92,8 @@ module CircuitBreaker
       )
     end
 
+    # Handle workflow completed event
+    # @param event [Hash] Event data
     def handle_workflow_completed(event)
       puts "\n[Handler] Workflow completed#{event['next_workflow'] ? ' with next workflow configured' : ''}"
       @js.publish("state.#{@workflow_id}",
@@ -85,6 +107,8 @@ module CircuitBreaker
       end
     end
 
+    # Check if any serverless functions need to be triggered
+    # @param place [String] Place in the workflow
     def check_and_trigger_functions(place)
       # Get function configuration for this place
       function_config = get_function_config(place)
@@ -101,6 +125,9 @@ module CircuitBreaker
       )
     end
 
+    # Get function configuration for a given place
+    # @param place [String] Place in the workflow
+    # @return [Hash] Function configuration
     def get_function_config(place)
       # This would be loaded from a configuration store
       # For now, returning a mock config
@@ -112,6 +139,8 @@ module CircuitBreaker
       }
     end
 
+    # Trigger a new workflow instance
+    # @param next_workflow_config [Hash] Configuration for the next workflow
     def trigger_next_workflow(next_workflow_config)
       new_workflow_id = SecureRandom.uuid
       
@@ -131,6 +160,9 @@ module CircuitBreaker
       )
     end
 
+    # Add a token to a place in the workflow
+    # @param place [String] Place in the workflow
+    # @param data [Hash, nil] Optional data for the token
     def add_token(place, data = nil)
       puts "\n[Token] Adding token to place: #{place} with data: #{data.inspect}"
       @js.publish("event.#{@workflow_id}",
@@ -144,6 +176,8 @@ module CircuitBreaker
       )
     end
 
+    # Fire a transition in the workflow
+    # @param transition_name [String] Name of the transition
     def fire_transition(transition_name)
       puts "\n[Transition] Firing transition: #{transition_name}"
       @js.publish("event.#{@workflow_id}",
@@ -156,6 +190,8 @@ module CircuitBreaker
       )
     end
 
+    # Complete the workflow
+    # @param next_workflow [Hash, nil] Optional configuration for the next workflow
     def complete_workflow(next_workflow = nil)
       puts "\n[Workflow] Completing workflow#{next_workflow ? ' and triggering next workflow' : ''}"
       event_data = {

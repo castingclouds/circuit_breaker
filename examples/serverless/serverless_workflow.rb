@@ -1,5 +1,5 @@
-require_relative '../lib/circuit_breaker'
-require_relative '../lib/circuit_breaker/nats_executor'
+require_relative '../../lib/circuit_breaker'
+require_relative '../../lib/circuit_breaker/nats_executor'
 
 # Create a new Workflow for an approval workflow
 wf = CircuitBreaker::Workflow.new
