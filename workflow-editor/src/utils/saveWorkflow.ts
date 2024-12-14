@@ -75,6 +75,15 @@ export const saveWorkflow = async (nodes: Node[], edges: Edge[]) => {
 
     const result = await response.json();
     console.log('Save successful:', result);
+
+    // After successful save, update the local workflow file
+    const workflowResponse = await fetch('http://localhost:3001/api/get-workflow');
+    if (workflowResponse.ok) {
+      const updatedWorkflow = await workflowResponse.json();
+      // You can dispatch an event or use a callback here to update the graph
+      window.dispatchEvent(new CustomEvent('workflowUpdated', { detail: updatedWorkflow }));
+    }
+
     return result.success;
   } catch (error) {
     console.error('Error saving workflow:', error);

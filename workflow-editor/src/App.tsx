@@ -59,6 +59,28 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
     [edges, onEdgesChange]
   );
 
+  const onEdgeUpdate = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      const newEdge = {
+        ...oldEdge,
+        ...newConnection,
+        id: `reactflow__edge-${newConnection.source}-${newConnection.target}`,
+      };
+      onEdgesChange(edges.map(e => e.id === oldEdge.id ? newEdge : e));
+    },
+    [edges, onEdgesChange]
+  );
+
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const updatedNodes = nodes.map(n => 
+        n.id === node.id ? { ...n, position: node.position } : n
+      );
+      onNodesChange(updatedNodes);
+    },
+    [nodes, onNodesChange]
+  );
+
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
     setSelectedNode(node);
@@ -152,9 +174,14 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onEdgeUpdate={onEdgeUpdate}
+        onNodeDragStop={onNodeDragStop}
         edgeUpdaterRadius={10}
         edgesFocusable={true}
         edgesUpdatable={true}
+        defaultEdgeOptions={{
+          type: 'smoothstep'
+        }}
         fitView
         defaultViewport={defaultViewport}
         style={{ background: '#f8fafc' }}
@@ -178,6 +205,47 @@ function App() {
     ...edge,
     style: { ...edgeStyles }
   })));
+
+  useEffect(() => {
+    const handleWorkflowUpdate = (event: CustomEvent<any>) => {
+      const workflowData = event.detail;
+      
+      // Update nodes based on workflow data
+      const updatedNodes = workflowData.places.states.map((state: string) => ({
+        id: state,
+        type: 'default',
+        data: { 
+          label: state.split('_').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+          ).join(' '),
+          description: `${state} state`
+        },
+        position: { x: 0, y: 0 }, // Position will be set by dagre
+        style: { ...nodeStyles }
+      }));
+
+      // Update edges based on workflow data
+      const updatedEdges = workflowData.transitions.regular.map((transition: any) => ({
+        id: `reactflow__edge-${transition.from}-${transition.to}`,
+        source: transition.from,
+        target: transition.to,
+        label: transition.name,
+        data: { 
+          label: transition.name,
+          requirements: transition.requires || []
+        },
+        style: { ...edgeStyles }
+      }));
+
+      setNodes(updatedNodes);
+      setEdges(updatedEdges);
+    };
+
+    window.addEventListener('workflowUpdated', handleWorkflowUpdate as EventListener);
+    return () => {
+      window.removeEventListener('workflowUpdated', handleWorkflowUpdate as EventListener);
+    };
+  }, []);
 
   const handleSave = useCallback(async () => {
     console.log('Saving workflow with nodes:', nodes);

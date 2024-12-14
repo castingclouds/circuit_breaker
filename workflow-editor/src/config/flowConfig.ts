@@ -1,6 +1,6 @@
 import { Edge } from 'reactflow';
 import { WORKFLOW_FILE } from './constants';
-import workflowConfig from './change_workflow.yaml';
+import workflowConfig from './workflow.yaml';
 import dagre from 'dagre';
 
 // Load and parse the YAML file
@@ -23,7 +23,6 @@ const defaultNodeStyle: NodeStyle = {
 const defaultEdgeStyle: EdgeStyle = {
   stroke: '#b1b1b7',
   strokeWidth: 2,
-  transition: '0.2s',
   labelBgPadding: [8, 4],
   labelBgStyle: {
     fill: '#fff',
@@ -35,6 +34,10 @@ const defaultEdgeStyle: EdgeStyle = {
     fontSize: 12,
     fill: '#777',
     fontWeight: 500
+  },
+  selected: {
+    stroke: '#3b82f6',
+    strokeWidth: 3
   }
 };
 
@@ -55,7 +58,6 @@ interface NodeStyle {
 interface EdgeStyle {
   stroke: string;
   strokeWidth: number;
-  transition: string;
   labelBgPadding: number[];
   labelBgStyle: {
     fill: string;
@@ -67,6 +69,10 @@ interface EdgeStyle {
     fontSize: number;
     fill: string;
     fontWeight: number;
+  };
+  selected: {
+    stroke: string;
+    strokeWidth: number;
   };
 }
 

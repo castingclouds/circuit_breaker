@@ -1,5 +1,5 @@
 import express from 'express';
-import { dump } from 'js-yaml';
+import { dump, load } from 'js-yaml';
 import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
@@ -14,6 +14,23 @@ app.use(express.json());
 app.use(cors());
 
 const PORT = 3001;
+
+// Get current workflow
+app.get('/api/get-workflow', async (req, res) => {
+  try {
+    const filePath = path.resolve(__dirname, '../../', WORKFLOW_PATH);
+    const yamlContent = fs.readFileSync(filePath, 'utf8');
+    const workflowData = load(yamlContent);
+    res.json(workflowData);
+  } catch (error) {
+    console.error('Error reading workflow:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error reading workflow', 
+      error: error.message 
+    });
+  }
+});
 
 app.post('/api/save-workflow', async (req, res) => {
   try {
