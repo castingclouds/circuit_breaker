@@ -16,18 +16,47 @@ const PORT = 3001;
 
 app.post('/api/save-workflow', async (req, res) => {
   try {
+    console.log('Received save workflow request');
+    
     if (!req.body) {
+      console.error('No workflow data provided');
       throw new Error('No workflow data provided');
     }
 
-    const yamlStr = dump(req.body);
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+
+    // Ensure all edges have a label property
+    if (req.body.edges) {
+      console.log('Processing edges on server side');
+      req.body.edges = req.body.edges.map(edge => {
+        console.log('Processing edge:', edge);
+        return {
+          ...edge,
+          label: edge.label || ''  // Ensure label exists
+        };
+      });
+      console.log('Processed edges:', req.body.edges);
+    }
+
+    console.log('Generating YAML string...');
+    const yamlStr = dump(req.body, {
+      indent: 2,
+      lineWidth: -1,  // No line wrapping
+      noRefs: true    // Don't use aliases
+    });
+    
     const filePath = path.resolve(__dirname, '../../src/config/workflow.yaml');
     
     console.log('Saving workflow to:', filePath);
-    console.log('Workflow data:', yamlStr);
+    console.log('YAML content to write:', yamlStr);
 
     await fs.promises.writeFile(filePath, yamlStr, 'utf8');
     console.log('Workflow saved successfully');
+
+    // Verify the file was written
+    const written = await fs.promises.readFile(filePath, 'utf8');
+    console.log('Verification - File contents after save:', written);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving workflow:', error);

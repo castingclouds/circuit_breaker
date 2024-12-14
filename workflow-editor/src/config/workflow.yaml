@@ -16,7 +16,7 @@ nodes:
       'y': 100
   - id: '3'
     data:
-      label: Sprint Backlog
+      label: Issue Assignment
       description: Issues selected for current sprint
     position:
       x: 250
@@ -50,6 +50,14 @@ nodes:
     position:
       x: 250
       'y': 600
+  - id: '1734193291971'
+    type: default
+    data:
+      label: CI
+      description: New node description
+    position:
+      x: 55.86457831325298
+      'y': 400.30000000000007
 edges:
   - id: e1-2
     source: '1'
@@ -74,6 +82,15 @@ edges:
   - id: reactflow__edge-2-3
     source: '2'
     target: '3'
+    label: Start Sprint
+  - id: reactflow__edge-1734193291971-6
+    source: '1734193291971'
+    target: '6'
+    label: Review Results
+  - id: reactflow__edge-4-1734193291971
+    source: '4'
+    target: '1734193291971'
+    label: Post Recieve
 styles:
   node:
     padding: 20

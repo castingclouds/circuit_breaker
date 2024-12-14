@@ -1,14 +1,25 @@
 import { Edge, Node, useEdges } from 'reactflow';
 import { Card } from 'flowbite-react';
 import { initialNodes } from '../config/flowConfig';
+import { useState, useEffect } from 'react';
 
 interface NodeDetailsProps {
-  node: Node | null;
-  onChange: (changes: any) => void;
+  node: Node;
+  onChange: (changes: any[]) => void;
+  onSave: () => Promise<boolean>;
 }
 
-export const NodeDetails = ({ node, onChange }: NodeDetailsProps) => {
+export const NodeDetails = ({ node, onChange, onSave }: NodeDetailsProps) => {
   const edges = useEdges();
+  const [label, setLabel] = useState(node?.data?.label || '');
+  const [description, setDescription] = useState(node?.data?.description || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    setLabel(node?.data?.label || '');
+    setDescription(node?.data?.description || '');
+  }, [node]);
 
   if (!node) {
     return (
@@ -21,19 +32,83 @@ export const NodeDetails = ({ node, onChange }: NodeDetailsProps) => {
   const incomingEdges = edges.filter(edge => edge.target === node.id);
   const outgoingEdges = edges.filter(edge => edge.source === node.id);
 
+  const handleChange = (field: string, value: string) => {
+    if (field === 'label') setLabel(value);
+    if (field === 'description') setDescription(value);
+
+    onChange([{
+      id: node.id,
+      data: {
+        ...node.data,
+        [field]: value
+      }
+    }]);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      const success = await onSave();
+      setSaveMessage(success ? 'Changes saved!' : 'Failed to save changes');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (error) {
+      setSaveMessage('Error saving changes');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
         <h3 className="text-lg font-bold text-gray-900 m-0">
-          {node.data.label}
+          {label}
         </h3>
         <p className="text-sm text-gray-600 mt-1 mb-0">
-          {node.data.description}
+          {description}
         </p>
       </div>
 
       <Card className="shadow-sm">
         <div className="space-y-6">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Name</h4>
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => handleChange('label', e.target.value)}
+              className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter node name"
+            />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
+            <textarea
+              value={description}
+              onChange={(e) => handleChange('description', e.target.value)}
+              className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter node description"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-4">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Details'}
+            </button>
+            {saveMessage && (
+              <span className={`text-sm ${saveMessage.includes('Error') || saveMessage.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
+                {saveMessage}
+              </span>
+            )}
+          </div>
+
           <div>
             <h4 className="text-sm font-semibold text-gray-900 mb-3">
               Incoming Transitions
