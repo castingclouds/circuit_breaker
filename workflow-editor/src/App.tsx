@@ -24,7 +24,7 @@ import { EdgeDetails } from './components/EdgeDetails';
 import { ResizablePanel } from './components/ResizablePanel';
 import { useKeyPress } from './hooks/useKeyPress';
 import { saveWorkflow } from './utils/saveWorkflow';
-import { initialNodes, initialEdges, nodeStyles, edgeStyles, selectedNodeStyles } from './config/flowConfig';
+import { initialNodes, initialEdges, nodeStyles, edgeStyles, selectedNodeStyles, defaultViewport } from './config/flowConfig';
 
 interface FlowProps {
   onNodeSelect: (node: Node | null) => void;
@@ -156,6 +156,7 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
         edgesFocusable={true}
         edgesUpdatable={true}
         fitView
+        defaultViewport={defaultViewport}
         style={{ background: '#f8fafc' }}
       >
         <Background />
@@ -181,7 +182,7 @@ function App() {
   const handleSave = useCallback(async () => {
     console.log('Saving workflow with nodes:', nodes);
     console.log('Saving workflow with edges:', edges);
-    return await saveWorkflow(nodes, edges, { node: nodeStyles, edge: edgeStyles });
+    return await saveWorkflow(nodes, edges);
   }, [nodes, edges]);
 
   const onNodeChange = useCallback((changes: any[]) => {

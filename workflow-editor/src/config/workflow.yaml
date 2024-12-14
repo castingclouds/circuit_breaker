@@ -1,121 +1,58 @@
-nodes:
-  - id: '1'
-    type: input
-    data:
-      label: Backlog
-      description: All incoming issues start here
-    position:
-      x: 250
-      'y': 0
-  - id: '2'
-    data:
-      label: Sprint Planning
-      description: Prioritize and assign issues
-    position:
-      x: 250
-      'y': 100
-  - id: '3'
-    data:
-      label: Issue Assignment
-      description: Issues selected for current sprint
-    position:
-      x: 250
-      'y': 200
-  - id: '4'
-    data:
-      label: In Progress
-      description: Currently being worked on
-    position:
-      x: 250
-      'y': 300
-  - id: '5'
-    data:
-      label: In Review
-      description: Pending code review
-    position:
-      x: 250
-      'y': 400
-  - id: '6'
-    data:
-      label: Testing
-      description: Undergoing QA testing
-    position:
-      x: 250
-      'y': 500
-  - id: '7'
-    type: output
-    data:
-      label: Done
-      description: Successfully completed
-    position:
-      x: 250
-      'y': 600
-  - id: '1734193291971'
-    type: default
-    data:
-      label: CI
-      description: New node description
-    position:
-      x: 55.86457831325298
-      'y': 400.30000000000007
-edges:
-  - id: e1-2
-    source: '1'
-    target: '2'
-    label: Move to Sprint
-  - id: e3-4
-    source: '3'
-    target: '4'
-    label: Start Work
-  - id: e4-5
-    source: '4'
-    target: '5'
-    label: Submit for Review
-  - id: e5-6
-    source: '5'
-    target: '6'
-    label: Approve Review
-  - id: e6-7
-    source: '6'
-    target: '7'
-    label: Completed
-  - id: reactflow__edge-2-3
-    source: '2'
-    target: '3'
-    label: Start Sprint
-  - id: reactflow__edge-1734193291971-6
-    source: '1734193291971'
-    target: '6'
-    label: Review Results
-  - id: reactflow__edge-4-1734193291971
-    source: '4'
-    target: '1734193291971'
-    label: Post Recieve
-styles:
-  node:
-    padding: 20
-    borderRadius: 8
-    border: '1px solid #e1e4e8'
-    backgroundColor: '#ffffff'
-    width: 180
-    fontSize: 14
-    color: '#1a1a1a'
-    fontWeight: 500
-    transition: all 0.2s ease
-    boxShadow: 0 1px 2px rgba(0, 0, 0, 0.1)
-  edge:
-    stroke: '#b1b5c3'
-    strokeWidth: 2
-    transition: all 0.2s ease
-    labelBgPadding:
-      - 8
-      - 12
-    labelBgStyle:
-      fill: '#ffffff'
-      stroke: '#e1e4e8'
-      strokeWidth: 1
-      borderRadius: 4
-    labelStyle:
-      fontSize: 12
-      fill: '#4b5563'
-      fontWeight: 500
+object_type: Issue
+places:
+  states:
+    - backlog
+    - sprint_planning
+    - assign_issue
+    - in_progress
+    - in_review
+    - testing
+    - done
+  special_states:
+    - blocked
+transitions:
+  regular:
+    - name: move_to_sprint
+      from: backlog
+      to: sprint_planning
+      requires:
+        - description
+        - priority
+    - name: plan_issue
+      from: sprint_planning
+      to: assign_issue
+      requires:
+        - story_points
+        - sprint
+    - name: start_coding
+      from: assign_issue
+      to: in_progress
+      requires:
+        - assignee
+    - name: submit_for_review
+      from: in_progress
+      to: in_review
+      requires:
+        - pull_request_url
+    - name: approve_review
+      from: in_review
+      to: testing
+      requires:
+        - review_approvals
+        - test_coverage
+    - name: pass_testing
+      from: testing
+      to: done
+      requires:
+        - qa_approved
+        - deployment_approved
+    - name: reject_review
+      from: in_review
+      to: in_progress
+      requires:
+        - review_comments
+    - name: fail_testing
+      from: testing
+      to: in_progress
+      requires:
+        - test_failure_reason

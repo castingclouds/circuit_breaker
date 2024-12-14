@@ -1,48 +1,66 @@
 import { Node, Edge } from 'reactflow';
 
 interface WorkflowData {
-  nodes: Node[];
-  edges: Edge[];
-  styles: {
-    node: Record<string, any>;
-    edge: Record<string, any>;
+  object_type: string;
+  places: {
+    states: string[];
+    special_states: string[];
+  };
+  transitions: {
+    regular: {
+      name: string;
+      from: string;
+      to: string;
+      requires?: string[];
+    }[];
+    special?: {
+      name: string;
+      from: string;
+      to: string;
+      requires?: string[];
+    }[];
   };
 }
 
-export const saveWorkflow = async (nodes: Node[], edges: Edge[], styles: WorkflowData['styles']) => {
-  console.log('saveWorkflow called with edges:', edges);
+export const saveWorkflow = async (nodes: Node[], edges: Edge[]) => {
+  console.log('saveWorkflow called with nodes:', nodes);
 
-  // Ensure edges have labels
-  const processedEdges = edges.map(edge => {
-    console.log('Processing edge:', edge);
-    return {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label || '',  // Always include label, even if empty
-      ...(edge.sourceHandle && { sourceHandle: edge.sourceHandle }),
-      ...(edge.targetHandle && { targetHandle: edge.targetHandle })
-    };
-  });
+  // Create a map of node IDs to their current labels
+  const nodeIdToLabel = new Map(nodes.map(node => [
+    node.id,
+    node.data.label.toLowerCase().replace(/\s+/g, '_')
+  ]));
 
-  console.log('Processed edges:', processedEdges);
+  // Get regular states (just the IDs)
+  const states = nodes
+    .filter(node => node.type !== 'special' && node.id !== 'blocked')
+    .map(node => node.data.label.toLowerCase().replace(/\s+/g, '_'));
+
+  // Get special states (just the IDs)
+  const specialStates = nodes
+    .filter(node => node.type === 'special' || node.id === 'blocked')
+    .map(node => node.data.label.toLowerCase().replace(/\s+/g, '_'));
+
+  // Convert edges to transitions, using the current node labels
+  const transitions = edges.map(edge => ({
+    name: (edge.label || 'transition').toLowerCase().replace(/\s+/g, '_'),
+    from: nodeIdToLabel.get(edge.source) || edge.source,
+    to: nodeIdToLabel.get(edge.target) || edge.target,
+    requires: edge.data?.requirements || []
+  }));
 
   const workflowData: WorkflowData = {
-    nodes: nodes.map(node => ({
-      id: node.id,
-      type: node.type,
-      data: node.data,
-      position: node.position,
-      ...(node.customStyle && { customStyle: node.customStyle })
-    })),
-    edges: processedEdges,
-    styles
+    object_type: 'Issue',
+    places: {
+      states,
+      special_states: specialStates
+    },
+    transitions: {
+      regular: transitions
+    }
   };
 
-  console.log('Sending workflow data to server:', JSON.stringify(workflowData, null, 2));
-
   try {
-    console.log('Making POST request to save workflow...');
     const response = await fetch('http://localhost:3001/api/save-workflow', {
       method: 'POST',
       headers: {
@@ -51,12 +69,15 @@ export const saveWorkflow = async (nodes: Node[], edges: Edge[], styles: Workflo
       body: JSON.stringify(workflowData),
     });
 
-    console.log('Server response status:', response.status);
-    const data = await response.json();
-    console.log('Server response data:', data);
-    return data.success;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('Save successful:', result);
+    return result.success;
   } catch (error) {
     console.error('Error saving workflow:', error);
-    return false;
+    throw error;
   }
 };

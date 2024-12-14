@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
+import { WORKFLOW_PATH, YAML_HEADER } from '../config/constants';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,47 +24,28 @@ app.post('/api/save-workflow', async (req, res) => {
       throw new Error('No workflow data provided');
     }
 
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-
-    // Ensure all edges have a label property
-    if (req.body.edges) {
-      console.log('Processing edges on server side');
-      req.body.edges = req.body.edges.map(edge => {
-        console.log('Processing edge:', edge);
-        return {
-          ...edge,
-          label: edge.label || ''  // Ensure label exists
-        };
-      });
-      console.log('Processed edges:', req.body.edges);
-    }
-
-    console.log('Generating YAML string...');
-    const yamlStr = dump(req.body, {
+    const workflowData = req.body;
+    
+    // Convert the workflow data to YAML
+    const yamlContent = dump(workflowData, {
       indent: 2,
-      lineWidth: -1,  // No line wrapping
-      noRefs: true    // Don't use aliases
+      lineWidth: -1, // Don't wrap lines
+      noRefs: true,  // Don't use aliases
     });
-    
-    const filePath = path.resolve(__dirname, '../../src/config/workflow.yaml');
-    
-    console.log('Saving workflow to:', filePath);
-    console.log('YAML content to write:', yamlStr);
 
-    await fs.promises.writeFile(filePath, yamlStr, 'utf8');
+    // Add YAML header and save
+    const fullContent = YAML_HEADER + yamlContent;
+    const filePath = path.resolve(__dirname, '../../', WORKFLOW_PATH);
+    fs.writeFileSync(filePath, fullContent, 'utf8');
+
     console.log('Workflow saved successfully');
-
-    // Verify the file was written
-    const written = await fs.promises.readFile(filePath, 'utf8');
-    console.log('Verification - File contents after save:', written);
-
-    res.json({ success: true });
+    res.json({ success: true, message: 'Workflow saved successfully' });
   } catch (error) {
     console.error('Error saving workflow:', error);
     res.status(500).json({ 
       success: false, 
-      error: String(error),
-      stack: error instanceof Error ? error.stack : undefined 
+      message: 'Error saving workflow', 
+      error: error.message 
     });
   }
 });

@@ -12,8 +12,10 @@
     "server": "tsx src/server/saveWorkflow.ts"
   },
   "dependencies": {
+    "@types/dagre": "^0.7.52",
     "@types/js-yaml": "^4.0.9",
     "@types/yaml": "^1.9.6",
+    "dagre": "^0.8.5",
     "flowbite": "^2.5.2",
     "flowbite-react": "^0.10.2",
     "js-yaml": "^4.1.0",

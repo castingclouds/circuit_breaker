@@ -3,7 +3,7 @@ import { Card } from 'flowbite-react';
 import { useState, useEffect } from 'react';
 
 interface EdgeDetailsProps {
-  edge: Edge;
+  edge: Edge | null;
   onChange: (changes: any[]) => void;
   onSave: () => Promise<boolean>;
 }
@@ -11,12 +11,15 @@ interface EdgeDetailsProps {
 export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const nodes = useNodes();
   const [label, setLabel] = useState(edge?.label || '');
+  const [requirements, setRequirements] = useState<string[]>(edge?.data?.requirements || []);
+  const [newRequirement, setNewRequirement] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
-  // Update label state when edge changes
+  // Update label and requirements state when edge changes
   useEffect(() => {
     setLabel(edge?.label || '');
+    setRequirements(edge?.data?.requirements || []);
   }, [edge]);
 
   if (!edge) {
@@ -35,7 +38,42 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
     onChange([{
       id: edge.id,
       label: newLabel,
-      data: { label: newLabel }
+      data: { 
+        ...edge.data,
+        label: newLabel,
+        requirements 
+      }
+    }]);
+  };
+
+  const handleAddRequirement = () => {
+    if (!newRequirement.trim()) return;
+    
+    const updatedRequirements = [...requirements, newRequirement.trim()];
+    setRequirements(updatedRequirements);
+    setNewRequirement('');
+    
+    onChange([{
+      id: edge.id,
+      data: { 
+        ...edge.data,
+        label,
+        requirements: updatedRequirements 
+      }
+    }]);
+  };
+
+  const handleRemoveRequirement = (index: number) => {
+    const updatedRequirements = requirements.filter((_, i) => i !== index);
+    setRequirements(updatedRequirements);
+    
+    onChange([{
+      id: edge.id,
+      data: { 
+        ...edge.data,
+        label,
+        requirements: updatedRequirements 
+      }
     }]);
   };
 
@@ -78,23 +116,57 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
               type="text"
               value={label}
               onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-4"
+              className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter transition label"
             />
-            <div className="flex items-center justify-between">
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
-              >
-                {isSaving ? 'Saving...' : 'Save Details'}
-              </button>
-              {saveMessage && (
-                <span className={`text-sm ${saveMessage.includes('Error') || saveMessage.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
-                  {saveMessage}
-                </span>
-              )}
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Requirements</h4>
+            <div className="space-y-2">
+              {requirements.map((req, index) => (
+                <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                  <span className="text-sm text-gray-700">{req}</span>
+                  <button
+                    onClick={() => handleRemoveRequirement(index)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newRequirement}
+                  onChange={(e) => setNewRequirement(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddRequirement()}
+                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Add a requirement"
+                />
+                <button
+                  onClick={handleAddRequirement}
+                  className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 transition-colors"
+                >
+                  Add
+                </button>
+              </div>
             </div>
+          </div>
+          <div className="flex items-center justify-between pt-4">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Details'}
+            </button>
+            {saveMessage && (
+              <span className={`text-sm ${saveMessage.includes('Error') || saveMessage.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
+                {saveMessage}
+              </span>
+            )}
           </div>
         </div>
       </Card>
