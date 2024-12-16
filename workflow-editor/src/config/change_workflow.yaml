@@ -1,0 +1,59 @@
+---
+object_type: Issue
+places:
+  states:
+    - backlog
+    - sprint_planning
+    - sprint_backlog
+    - in_progress
+    - in_review
+    - testing
+    - done
+  special_states:
+    - blocked
+transitions:
+  regular:
+    - name: move_to_sprint
+      from: backlog
+      to: sprint_planning
+      requires:
+        - description
+        - priority
+    - name: plan_issue
+      from: sprint_planning
+      to: sprint_backlog
+      requires:
+        - story_points
+        - sprint
+    - name: start_work
+      from: sprint_backlog
+      to: in_progress
+      requires:
+        - assignee
+    - name: submit_for_review
+      from: in_progress
+      to: in_review
+      requires:
+        - pull_request_url
+    - name: approve_review
+      from: in_review
+      to: testing
+      requires:
+        - review_approvals
+        - test_coverage
+    - name: pass_testing
+      from: testing
+      to: done
+      requires:
+        - qa_approved
+        - deployment_approved
+    - name: reject_review
+      from: in_review
+      to: in_progress
+      requires:
+        - review_comments
+    - name: fail_testing
+      from: testing
+      to: in_progress
+      requires:
+        - test_failure_reason
