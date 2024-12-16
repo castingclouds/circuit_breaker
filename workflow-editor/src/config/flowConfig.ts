@@ -1,4 +1,4 @@
-import { Edge } from 'reactflow';
+import { Edge, MarkerType } from 'reactflow';
 import { WORKFLOW_FILE } from './constants';
 import workflowConfig from './workflow.yaml';
 import dagre from 'dagre';
@@ -37,7 +37,19 @@ const defaultEdgeStyle: EdgeStyle = {
   },
   selected: {
     stroke: '#3b82f6',
-    strokeWidth: 3
+    strokeWidth: 3,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 20,
+      height: 20,
+      color: '#3b82f6'
+    }
+  },
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 20,
+    height: 20,
+    color: '#b1b1b7'
   }
 };
 
@@ -73,12 +85,30 @@ interface EdgeStyle {
   selected: {
     stroke: string;
     strokeWidth: number;
+    markerEnd?: {
+      type: string;
+      width: number;
+      height: number;
+      color: string;
+    };
+  };
+  markerEnd?: {
+    type: string;
+    width: number;
+    height: number;
+    color: string;
   };
 }
 
 // Export the styles
 export const nodeStyles = defaultNodeStyle;
-export const edgeStyles = defaultEdgeStyle;
+export const edgeStyles = {
+  ...defaultEdgeStyle,
+  startLabelStyle: {
+    ...defaultEdgeStyle.labelStyle,
+    distance: 10
+  }
+};
 
 // Add selected node styles
 export const selectedNodeStyles = {

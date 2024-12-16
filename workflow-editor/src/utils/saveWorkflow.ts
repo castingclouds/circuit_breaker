@@ -43,7 +43,7 @@ export const saveWorkflow = async (nodes: Node[], edges: Edge[]) => {
 
   // Convert edges to transitions, using the current node labels
   const transitions = edges.map(edge => ({
-    name: (edge.label || 'transition').toLowerCase().replace(/\s+/g, '_'),
+    name: (edge.startLabel || 'transition').toLowerCase().replace(/\s+/g, '_'),
     from: nodeIdToLabel.get(edge.source) || edge.source,
     to: nodeIdToLabel.get(edge.target) || edge.target,
     requires: edge.data?.requirements || []

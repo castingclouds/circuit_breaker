@@ -12,7 +12,8 @@ import ReactFlow, {
   NodeChange,
   EdgeChange,
   applyNodeChanges,
-  applyEdgeChanges
+  applyEdgeChanges,
+  MarkerType
 } from 'reactflow';
 import { ReactFlowProvider } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -51,8 +52,15 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
       const newEdge = {
         ...params,
         id: `reactflow__edge-${params.source}-${params.target}`,
-        label: 'New Transition',
-        data: { label: 'New Transition' }
+        data: { label: 'New Transition' },
+        startLabel: 'New Transition',
+        style: edgeStyles,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#b1b1b7'
+        }
       };
       onEdgesChange([...edges, newEdge]);
     },
@@ -65,6 +73,14 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
         ...oldEdge,
         ...newConnection,
         id: `reactflow__edge-${newConnection.source}-${newConnection.target}`,
+        startLabel: oldEdge.startLabel,
+        style: edgeStyles,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#b1b1b7'
+        }
       };
       onEdgesChange(edges.map(e => e.id === oldEdge.id ? newEdge : e));
     },
@@ -180,7 +196,14 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
         edgesFocusable={true}
         edgesUpdatable={true}
         defaultEdgeOptions={{
-          type: 'smoothstep'
+          type: 'smoothstep',
+          style: edgeStyles,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+            color: '#b1b1b7'
+          }
         }}
         fitView
         defaultViewport={defaultViewport}
@@ -229,12 +252,22 @@ function App() {
         id: `reactflow__edge-${transition.from}-${transition.to}`,
         source: transition.from,
         target: transition.to,
-        label: transition.name,
+        startLabel: transition.name.split('_').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' '),
         data: { 
-          label: transition.name,
+          label: transition.name.split('_').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+          ).join(' '),
           requirements: transition.requires || []
         },
-        style: { ...edgeStyles }
+        style: { ...edgeStyles },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#b1b1b7'
+        }
       }));
 
       setNodes(updatedNodes);

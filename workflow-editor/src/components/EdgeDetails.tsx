@@ -10,7 +10,7 @@ interface EdgeDetailsProps {
 
 export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const nodes = useNodes();
-  const [label, setLabel] = useState(edge?.label || '');
+  const [label, setLabel] = useState(edge?.startLabel || '');
   const [requirements, setRequirements] = useState<string[]>(edge?.data?.requirements || []);
   const [newRequirement, setNewRequirement] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -18,7 +18,7 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
 
   // Update label and requirements state when edge changes
   useEffect(() => {
-    setLabel(edge?.label || '');
+    setLabel(edge?.startLabel || '');
     setRequirements(edge?.data?.requirements || []);
   }, [edge]);
 
@@ -37,7 +37,7 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
     setLabel(newLabel);
     onChange([{
       id: edge.id,
-      label: newLabel,
+      startLabel: newLabel,
       data: { 
         ...edge.data,
         label: newLabel,
