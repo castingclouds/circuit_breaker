@@ -1,78 +1,124 @@
-# Document Workflow Example
+# Document Workflow Examples
 
-This example demonstrates how to use the Circuit Breaker library to implement a document workflow system with state transitions, validations, and history tracking.
+This directory contains examples demonstrating how to use the Circuit Breaker library to implement a document workflow system. The examples showcase various features including state management, validation rules, event handling, and workflow visualization.
 
-## Features Demonstrated
+## Overview
 
-- State transitions (draft → pending_review → reviewed → approved/rejected)
-- Attribute validations (title, content, dates, etc.)
-- Custom transition rules
-- Event handling (sync and async)
+The document workflow system implements a simple document review and approval process with the following states:
+- `draft`: Initial state for new documents
+- `pending_review`: Document submitted for review
+- `reviewed`: Review completed with comments
+- `approved`: Document approved by manager
+- `rejected`: Document rejected with reasons
+
+## Example Files
+
+### `token_example.rb`
+Defines the `Document` class that inherits from `CircuitBreaker::Token`. It demonstrates:
+- State transitions and validation rules
+- Attribute validation (title, content, tags, etc.)
+- Event handling and hooks
+- Timing tracking (submission, review, approval times)
+
+### `workflow_example.rb`
+Shows a complete document workflow lifecycle including:
+- Document creation with metadata
+- State transitions (submit → review → approve)
+- Event handling and notifications
+- Workflow visualization export
 - History tracking
-- Timeline visualization
-- Multiple export formats (HTML, Markdown)
 
-## Files
+### `rules_example.rb`
+Demonstrates various validation rules and constraints:
+- Title validation (required, capitalization)
+- Content length requirements
+- Reviewer/approver validation (prevent self-review)
+- Metadata validation (tags, priority)
+- State-specific validation rules
 
-- `document_token.rb`: The Document class implementation
-- `example.rb`: Example usage of the Document workflow
-- `workflow_mermaid.html`: Generated workflow visualization using Mermaid
-- `workflow_markdown.md`: Generated workflow documentation in Markdown
-- `document_timeline.html`: Generated timeline of document history
+## Running the Examples
 
-## Usage
-
-Run the example:
+Each example can be run independently:
 
 ```bash
-ruby example.rb
+# Run the complete workflow example
+ruby workflow_example.rb
+
+# Run the validation rules example
+ruby rules_example.rb
+
+# Run the visualization example
+ruby visualization_example.rb
 ```
 
-This will:
-1. Create a new document
-2. Submit it for review
-3. Review and approve the document
-4. Generate visualizations and history timeline
-5. Print the document's history
+## Key Features Demonstrated
 
-## State Machine
+### State Management
+- DSL-based workflow definition
+- State transitions with validation
+- Guard conditions and requirements
 
-```mermaid
-stateDiagram-v2
-    [*] --> draft
-    draft --> pending_review: submit
-    pending_review --> reviewed: review
-    reviewed --> approved: approve
-    reviewed --> rejected: reject
-    rejected --> draft: resubmit
-    approved --> [*]
-```
+### Validation Rules
+- Attribute-level validation
+- State-specific validation
+- Transition rules
+- Custom validation logic
 
-## Validation Rules
+### Event Handling
+- Before/after transition hooks
+- Attribute change tracking
+- Async event handlers
+- Audit logging
 
-- Title must be present and start with a capital letter
-- Content must be present and at least 10 characters
-- Reviewer must be different from author
-- Reviewer comments required for reviewed state
-- Approver must be different from author and reviewer
-- Rejection reason required for rejected state
+### Timing and History
+- Submission time tracking
+- Review duration calculation
+- Total processing time
+- Complete audit history
 
-## Event Handling
+### Visualization
+- Multiple output formats (HTML, Mermaid, DOT)
+- State diagram generation
+- Transition visualization
+- Workflow documentation
 
-The example demonstrates both synchronous and asynchronous event handling:
+## Implementation Details
 
-- State changes
-- Attribute modifications
-- Transition failures
-- Async notifications
+The examples use the Circuit Breaker library's core features:
+- `CircuitBreaker::Token` for state and attribute management
+- `CircuitBreaker::WorkflowDSL` for workflow definition
+- Petri net-based state machine implementation
+- Event system for notifications and logging
 
-## History Tracking
+## Example Workflow
 
-Every state transition and attribute change is recorded with:
+1. Create a new document with title, content, and metadata
+2. Submit for review (requires reviewer ID)
+3. Add review comments (requires minimum length)
+4. Approve or reject (requires different approver)
+5. Track timing and history throughout
 
-- Timestamp
-- Actor ID
-- Event type
-- Event details
+The workflow enforces business rules such as:
+- No self-review or self-approval
+- Minimum content length requirements
+- Required fields for each state
+- Valid metadata formats
 
-The history can be viewed in a beautiful timeline visualization (see `document_timeline.html`).
+## Extending the Examples
+
+You can extend these examples by:
+1. Adding new states or transitions
+2. Implementing additional validation rules
+3. Creating custom event handlers
+4. Adding new visualization formats
+5. Implementing more complex workflows
+
+## Error Handling
+
+The examples demonstrate proper error handling for:
+- Invalid state transitions
+- Validation failures
+- Missing required fields
+- Business rule violations
+
+Each error includes descriptive messages to help identify and fix issues.
