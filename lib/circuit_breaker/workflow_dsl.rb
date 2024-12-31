@@ -7,81 +7,178 @@ module CircuitBreaker
     end
 
     def self.define(&block)
-      builder = Builder.new
+      builder = WorkflowBuilder.new
       builder.instance_eval(&block)
       builder.build_workflow
     end
 
-    class Builder
-      attr_reader :states, :transitions, :validations, :object_type
-
-      def initialize
-        @states = []
-        @transitions = []
+    class ValidationBuilder
+      def initialize(builder)
+        @builder = builder
         @validations = []
       end
 
-      def for_object(type)
-        @object_type = type
+      def title
+        FieldValidator.new(:title, @validations)
       end
 
-      def states(*state_list)
-        @states.concat(state_list)
+      def content
+        FieldValidator.new(:content, @validations)
+      end
+
+      def tags
+        FieldValidator.new(:tags, @validations)
+      end
+
+      def priority
+        FieldValidator.new(:priority, @validations)
+      end
+
+      def validations
+        @validations
+      end
+    end
+
+    class FieldValidator
+      def initialize(field, validations)
+        @field = field
+        @validations = validations
+      end
+
+      def must_be_present
+        @validations << {
+          field: @field,
+          type: :presence,
+          validate: ->(value) { !value.nil? && !value.to_s.empty? }
+        }
+        self
+      end
+
+      def must_start_with_capital
+        @validations << {
+          field: @field,
+          type: :format,
+          validate: ->(value) { value.to_s.match?(/^[A-Z]/) }
+        }
+        self
+      end
+
+      def minimum_length(length)
+        @validations << {
+          field: @field,
+          type: :length,
+          validate: ->(value) { value.to_s.length >= length }
+        }
+        self
+      end
+
+      def must_match(pattern)
+        @validations << {
+          field: @field,
+          type: :format,
+          validate: ->(value) { 
+            value.is_a?(Array) ? value.all? { |v| v.to_s.match?(pattern) } : value.to_s.match?(pattern)
+          }
+        }
+        self
+      end
+
+      def must_be_one_of(values)
+        @validations << {
+          field: @field,
+          type: :inclusion,
+          validate: ->(value) { values.include?(value.to_s.downcase) }
+        }
+        self
+      end
+    end
+
+    class WorkflowBuilder
+      include Validators
+
+      def initialize
+        @states = []
+        @transitions = {}
+        @before_flows = []
+        @rules = []
+      end
+
+      def states(*states)
+        @states = states
+        self
       end
 
       def flow(transition)
-        Action.new(self, transition.from_state, transition.to_state)
+        if transition.is_a?(Hash)
+          from, to = transition.first
+        elsif transition.respond_to?(:>>)
+          from = transition.instance_variable_get(:@from_state)
+          to = transition.instance_variable_get(:@to_state)
+        else
+          from, to = transition.to_s.split(">>").map(&:strip).map(&:to_sym)
+        end
+
+        @current_transition = { from: from, to: to }
+        self
+      end
+
+      def transition(name)
+        raise "No current transition" unless @current_transition
+        @transitions[name] = @current_transition.dup
+        @current_name = name
+        self
+      end
+
+      def validates(*fields)
+        raise "No current transition name" unless @current_name
+        @transitions[@current_name][:required_fields] ||= []
+        @transitions[@current_name][:required_fields].concat(fields)
+        self
+      end
+      alias_method :needs, :validates
+
+      def rule(*rule_names)
+        raise "No current transition name" unless @current_name
+        @transitions[@current_name][:rules] ||= []
+        @transitions[@current_name][:rules].concat(rule_names)
+        self
+      end
+      alias_method :rules, :rule
+
+      def before_flow(&block)
+        @before_flows << block
+        self
+      end
+
+      def validate_with(validators)
+        @validators = validators.validators
+        before_flow do |token|
+          @validators.each do |field, validator|
+            result = validator.call(token)
+            case result
+            when ValidationResult
+              unless result.valid?
+                raise Token::ValidationError, "Invalid #{field}: #{result}"
+              end
+            when Proc
+              validator_result = result.call(token)
+              unless validator_result
+                raise Token::ValidationError, "Invalid #{field}"
+              end
+            else
+              raise Token::ValidationError, "Invalid validator type for #{field}"
+            end
+          end
+        end
       end
 
       def build_workflow
-        workflow = CircuitBreaker::Workflow.new
-        workflow.states = @states
-        
-        @transitions.each do |t|
-          workflow.add_transition(
-            name: t[:name],
-            from: t[:from],
-            to: t[:to],
-            requires: t[:requires],
-            guard: t[:guard],
-            validate: t[:validate]
-          )
-        end
-        
-        workflow
-      end
-
-      def method_missing(method_name, *args, &block)
-        if @states.include?(method_name)
-          flow(method_name)
-        else
-          super
-        end
-      end
-
-      def respond_to_missing?(method_name, include_private = false)
-        @states.include?(method_name) || super
-      end
-
-      def _add_transition(from:, to:, via:, options: {})
-        transition = {
-          name: via,
-          from: from,
-          to: to,
-          requires: options[:requires],
-          guard: options[:guard],
-          validate: options[:validate]
-        }
-
-        # Add validation if provided
-        if options[:validate]
-          @validations << {
-            state: from,
-            validate: options[:validate]
-          }
-        end
-
-        @transitions << transition
+        Workflow.new(
+          states: @states,
+          transitions: @transitions,
+          before_flows: @before_flows,
+          rules: @rules
+        )
       end
     end
 
@@ -91,6 +188,14 @@ module CircuitBreaker
       def initialize(from_state, to_state)
         @from_state = from_state
         @to_state = to_state
+      end
+
+      def >>(other)
+        if other.is_a?(StateTransition)
+          StateTransition.new(from_state, other.to_state)
+        else
+          StateTransition.new(from_state, other)
+        end
       end
     end
 
@@ -102,26 +207,35 @@ module CircuitBreaker
         @options = {}
       end
 
-      def via(transition_name)
-        @transition_name = transition_name
+      def transition(name)
+        @transition_name = name
         @builder._add_transition(
           from: @from_state,
           to: @to_state,
-          via: transition_name,
+          via: name,
           options: @options
         )
         self
       end
+      alias_method :via, :transition
+      alias_method :named, :transition
 
-      def requires(fields)
-        @options[:requires] = fields
+      def validates(*fields)
+        @options[:requires] = fields.flatten
+        self
+      end
+      alias_method :requires, :validates
+
+      def rule(rule_name)
+        @options[:rule] = rule_name
         self
       end
 
-      def validate(&block)
+      def when(&block)
         @options[:validate] = block
         self
       end
+      alias_method :validate, :when
 
       def guard(&block)
         @options[:guard] = block

@@ -4,6 +4,84 @@ require 'json-schema'
 
 module CircuitBreaker
   module Validators
+    class DSL
+      def self.define(&block)
+        new.tap { |dsl| dsl.instance_eval(&block) }
+      end
+
+      def self.define_token_validators(&block)
+        new.tap do |dsl| 
+          dsl.extend(TokenValidators)
+          dsl.instance_eval(&block)
+        end
+      end
+
+      def initialize
+        @validators = {}
+      end
+
+      def validator(name, &block)
+        @validators[name] = block
+      end
+
+      def evaluate(field, token)
+        validator = @validators[field]
+        return ValidationResult.new(true) unless validator
+        
+        result = validator.call(token)
+        case result
+        when ValidationResult
+          result
+        when true, false
+          ValidationResult.new(result, result ? nil : "validation failed for #{field}")
+        else
+          ValidationResult.new(!!result, result.to_s)
+        end
+      end
+
+      def validators
+        @validators
+      end
+    end
+
+    module TokenValidators
+      def presence(field)
+        ->(token) {
+          value = token.send(field)
+          Rules.presence.call(value)
+        }
+      end
+
+      def regex(field, pattern, message = nil)
+        ->(token) {
+          value = token.send(field)
+          Rules.regex(pattern, message).call(value)
+        }
+      end
+
+      def length(field, options = {})
+        ->(token) {
+          value = token.send(field)
+          Rules.length(min: options[:min], max: options[:max]).call(value)
+        }
+      end
+
+      def inclusion(field, values)
+        ->(token) {
+          value = token.send(field)
+          Rules.inclusion(values).call(value)
+        }
+      end
+
+      def all(*validators)
+        ->(token) {
+          validators.reduce(ValidationResult.new(true)) do |acc, validator|
+            acc & validator.call(token)
+          end
+        }
+      end
+    end
+
     class ValidationResult
       attr_reader :valid, :errors
 
@@ -104,14 +182,16 @@ module CircuitBreaker
 
       def self.inclusion(values)
         ->(value) {
-          valid = values.include?(value)
+          return ValidationResult.new(true) if value.nil?
+          valid = values.include?(value.to_s.downcase)
           ValidationResult.new(valid, valid ? nil : "must be one of: #{values.join(', ')}")
         }
       end
 
       def self.exclusion(values)
         ->(value) {
-          valid = !values.include?(value)
+          return ValidationResult.new(true) if value.nil?
+          valid = !values.include?(value.to_s.downcase)
           ValidationResult.new(valid, valid ? nil : "cannot be one of: #{values.join(', ')}")
         }
       end
@@ -119,12 +199,12 @@ module CircuitBreaker
       def self.format(type)
         case type
         when :email
-          regex(/\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i, "must be a valid email address")
+          regex(/\A[^@\s]+@[^@\s]+\z/, "must be a valid email address")
         when :url
           ->(value) {
             return ValidationResult.new(true) if value.nil?
             begin
-              uri = URI.parse(value)
+              uri = URI.parse(value.to_s)
               valid = uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
               ValidationResult.new(valid, valid ? nil : "must be a valid URL")
             rescue URI::InvalidURIError
@@ -141,18 +221,8 @@ module CircuitBreaker
               ValidationResult.new(false, "must be a valid date")
             end
           }
-        when :time
-          ->(value) {
-            return ValidationResult.new(true) if value.nil?
-            begin
-              Time.parse(value.to_s)
-              ValidationResult.new(true)
-            rescue ArgumentError
-              ValidationResult.new(false, "must be a valid time")
-            end
-          }
         else
-          raise ArgumentError, "Unsupported format type: #{type}"
+          raise ArgumentError, "unknown format type: #{type}"
         end
       end
 
@@ -174,31 +244,33 @@ module CircuitBreaker
           return ValidationResult.new(false, "must be enumerable") unless value.respond_to?(:each)
 
           results = value.map { |item| block.call(item) }
-          errors = results.reject(&:valid?).flat_map(&:errors)
-          ValidationResult.new(errors.empty?, errors)
+          valid = results.all?(&:valid?)
+          errors = results.flat_map(&:errors)
+          ValidationResult.new(valid, errors)
         }
       end
 
       def self.custom(&block)
         ->(value) {
           result = block.call(value)
-          if result.is_a?(ValidationResult)
+          case result
+          when ValidationResult
             result
+          when true, false
+            ValidationResult.new(result, result ? nil : "failed custom validation")
           else
-            ValidationResult.new(result != false && !result.is_a?(String), result.is_a?(String) ? result : nil)
+            ValidationResult.new(!!result, result.to_s)
           end
         }
       end
 
       def self.depends_on(other_field, &block)
         ->(value, context) {
+          return ValidationResult.new(true) if value.nil?
+          return ValidationResult.new(false, "no context provided") unless context
           other_value = context.send(other_field)
           result = block.call(value, other_value)
-          if result.is_a?(ValidationResult)
-            result
-          else
-            ValidationResult.new(result != false && !result.is_a?(String), result.is_a?(String) ? result : nil)
-          end
+          ValidationResult.new(result, result ? nil : "failed dependency validation with #{other_field}")
         }
       end
 
@@ -206,18 +278,18 @@ module CircuitBreaker
         ->(value) {
           return ValidationResult.new(true) if value.nil?
           
-          begin
-            num = Float(value)
-            errors = []
-            
-            errors << "must be greater than #{options[:greater_than]}" if options[:greater_than] && num <= options[:greater_than]
-            errors << "must be less than #{options[:less_than]}" if options[:less_than] && num >= options[:less_than]
-            errors << "must be an integer" if options[:only_integer] && !num.to_i.eql?(num)
-            
-            ValidationResult.new(errors.empty?, errors)
-          rescue ArgumentError
-            ValidationResult.new(false, "must be a number")
+          errors = []
+          number = value.to_f
+          
+          if options[:greater_than] && !(number > options[:greater_than])
+            errors << "must be greater than #{options[:greater_than]}"
           end
+          
+          if options[:less_than] && !(number < options[:less_than])
+            errors << "must be less than #{options[:less_than]}"
+          end
+          
+          ValidationResult.new(errors.empty?, errors)
         }
       end
     end

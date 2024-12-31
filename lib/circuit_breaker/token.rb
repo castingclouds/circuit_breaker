@@ -82,6 +82,37 @@ module CircuitBreaker
           raise ArgumentError, "Unsupported format: #{format}"
         end
       end
+
+      def define_attribute(name, type = nil, **options)
+        define_method(name) do
+          instance_variable_get("@#{name}")
+        end
+
+        define_method("#{name}=") do |value|
+          old_value = instance_variable_get("@#{name}")
+          
+          # Type validation
+          if type && !value.nil?
+            unless value.is_a?(type)
+              raise ValidationError, "Invalid type for #{name}: expected #{type}, got #{value.class}"
+            end
+          end
+
+          # Custom validation
+          if options[:validate]
+            result = options[:validate].call(value)
+            case result
+            when false
+              raise ValidationError, "Invalid value for #{name}"
+            when String
+              raise ValidationError, result
+            end
+          end
+
+          instance_variable_set("@#{name}", value)
+          notify(:attribute_changed, attribute: name, old_value: old_value, new_value: value)
+        end
+      end
     end
 
     def initialize(state: nil, metadata: {})
@@ -91,6 +122,8 @@ module CircuitBreaker
       @updated_at = @created_at
       @event_handlers = Hash.new { |h, k| h[k] = [] }
       @async_handlers = Hash.new { |h, k| h[k] = [] }
+      @observers = Hash.new { |h, k| h[k] = [] }
+      @async_observers = Hash.new { |h, k| h[k] = [] }
       @history = []
       
       # Initialize instance variables from metadata
@@ -137,6 +170,8 @@ module CircuitBreaker
         trigger(:state_changed, old_state: old_state, new_state: new_state)
         trigger_async(:state_changed, old_state: old_state, new_state: new_state)
         
+        notify(:state_changed, old_state: old_state, new_state: new_state)
+        
         true
       rescue StandardError => e
         # Record the failed transition
@@ -148,6 +183,7 @@ module CircuitBreaker
 
         trigger(:transition_failed, error: e, from: old_state, to: new_state)
         trigger_async(:transition_failed, error: e, from: old_state, to: new_state)
+        notify(:transition_failed, error: e, from: old_state, to: new_state)
         raise
       end
     end
@@ -189,12 +225,30 @@ module CircuitBreaker
       end
     end
 
+    def on(event, async: false, &block)
+      if async
+        @async_observers[event] << block
+      else
+        @observers[event] << block
+      end
+    end
+
+    def notify(event, data = {})
+      @observers[event].each { |observer| observer.call(data) }
+      
+      @async_observers[event].each do |observer|
+        Thread.new do
+          observer.call(data)
+        end
+      end
+    end
+
     # Serialization methods
     def to_h(include_private = false)
       if include_private
         # Get all instance variables including private state
         instance_variables.each_with_object({}) do |var, hash|
-          next if [:@event_handlers, :@async_handlers].include?(var)
+          next if [:@event_handlers, :@async_handlers, :@observers, :@async_observers].include?(var)
           key = var.to_s.delete_prefix('@').to_sym
           hash[key] = instance_variable_get(var)
         end
@@ -263,57 +317,6 @@ module CircuitBreaker
 
     protected
 
-    # Helper method to define attributes with validation
-    def self.define_attribute(name, options = {})
-      attr_reader name
-
-      # Convert simple validations to ValidationResult objects
-      if validator = options[:validates]
-        if validator.is_a?(Array)
-          # Composite validation using AND
-          validator = Validators::CompositeValidator.all(*validator)
-        end
-      end
-
-      # Store validations for later use
-      attribute_validations[name] = validator if validator
-
-      # Define setter with validation
-      define_method("#{name}=") do |value|
-        old_value = instance_variable_get("@#{name}")
-        
-        # Run validation if provided
-        if validator = self.class.attribute_validations[name]
-          result = validator.call(value)
-          raise ValidationError, "Invalid value for #{name}: #{result}" unless result.valid?
-        end
-
-        instance_variable_set("@#{name}", value)
-        @updated_at = Time.now
-        
-        # Record the change in history
-        record_event(:attribute_changed, {
-          attribute: name,
-          old_value: old_value,
-          new_value: value
-        })
-        
-        # Trigger attribute change events
-        trigger(:attribute_changed, 
-                attribute: name, 
-                old_value: old_value, 
-                new_value: value)
-        trigger_async(:attribute_changed,
-                     attribute: name,
-                     old_value: old_value,
-                     new_value: value)
-        
-        value
-      end
-    end
-
-    private
-
     def validate_current_state(state = @state)
       return unless state
       if validator = self.class.state_validations[state]
@@ -340,6 +343,22 @@ module CircuitBreaker
 
     def respond_to_missing?(method_name, include_private = false)
       instance_variable_defined?("@#{method_name}") || super
+    end
+
+    def has_reviewer?
+      !reviewer_id.nil?
+    end
+
+    def has_comments?
+      !reviewer_comments.to_s.empty?
+    end
+
+    def has_different_approver?
+      approver_id && approver_id != reviewer_id
+    end
+
+    def has_rejection_reason?
+      !rejection_reason.to_s.empty?
     end
   end
 end
