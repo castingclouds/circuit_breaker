@@ -115,9 +115,9 @@ module CircuitBreaker
       end
     end
 
-    def initialize(state: nil, metadata: {})
+    def initialize(attributes = {})
       @id = SecureRandom.uuid
-      @state = state || :draft
+      @state = attributes.delete(:state) || :draft
       @created_at = Time.now
       @updated_at = @created_at
       @event_handlers = Hash.new { |h, k| h[k] = [] }
@@ -126,14 +126,10 @@ module CircuitBreaker
       @async_observers = Hash.new { |h, k| h[k] = [] }
       @history = []
       
-      # Initialize instance variables from metadata
-      metadata.each do |key, value|
+      # Initialize instance variables from attributes
+      attributes.each do |key, value|
         instance_variable_set("@#{key}", value)
-        self.class.send(:attr_accessor, key) unless respond_to?(key)
       end
-
-      # Run initial validations
-      validate_current_state if @state
     end
 
     def update_state(new_state, actor_id: nil)
