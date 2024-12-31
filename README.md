@@ -169,6 +169,90 @@ wf.connect('reject', 'rejected')
    - DAG: Tasks typically execute exactly once
    - Petri Net: Places can receive tokens multiple times
 
+## Using the Workflow DSL
+
+The Circuit Breaker provides a clean DSL for defining workflows:
+
+```ruby
+workflow = CircuitBreaker::WorkflowDSL.define do
+  # Configure workflow settings
+  for_object 'Document'
+  
+  # Define all possible states
+  states :draft, :pending_review, :reviewed, :approved, :rejected
+  
+  # Define the flows with their validations
+  flow(:draft >> :pending_review).configure do
+    via(:submit)
+    requires [:title, :content]
+    
+    validate do |doc|
+      doc.title.to_s.length >= 3 && doc.content.to_s.length >= 10
+    end
+  end
+  
+  flow(:pending_review >> :reviewed).configure do
+    via(:review)
+    requires [:reviewer_comments]
+    
+    validate do |doc|
+      !doc.reviewer_id.nil? && !doc.reviewer_id.empty?
+    end
+  end
+  
+  flow(:reviewed >> :approved).configure do
+    via(:approve)
+    requires [:approver_id]
+    
+    guard do |metadata|
+      rules_engine.evaluate('can_approve', metadata)
+    end
+  end
+end
+```
+
+### DSL Components
+
+1. **State Definition**
+   ```ruby
+   states :draft, :pending_review, :reviewed, :approved, :rejected
+   ```
+
+2. **Flow Definition**
+   ```ruby
+   flow(:state1 >> :state2).configure do
+     via(:action_name)
+   end
+   ```
+
+3. **Requirements**
+   ```ruby
+   flow(:draft >> :pending_review).configure do
+     via(:submit)
+     requires [:title, :content]
+   end
+   ```
+
+4. **Validations**
+   ```ruby
+   flow(:draft >> :pending_review).configure do
+     via(:submit)
+     validate do |doc|
+       doc.title.to_s.length >= 3
+     end
+   end
+   ```
+
+5. **Guard Conditions**
+   ```ruby
+   flow(:reviewed >> :approved).configure do
+     via(:approve)
+     guard do |metadata|
+       rules_engine.evaluate('can_approve', metadata)
+     end
+   end
+   ```
+
 ## Example Walkthrough: Approval Workflow
 
 Let's walk through how our example approval workflow works using Petri Nets:

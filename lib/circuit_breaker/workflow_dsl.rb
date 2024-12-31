@@ -1,240 +1,196 @@
-require 'yaml'
-require 'json'
-
 module CircuitBreaker
-  # Domain-specific language for defining workflows
-  # Provides a fluent interface for creating workflow configurations
   module WorkflowDSL
-    # Builder class for constructing workflow configurations
-    # Uses method chaining to create a readable DSL
+    class ::Symbol
+      def >>(other)
+        StateTransition.new(self, other)
+      end
+    end
+
+    def self.define(&block)
+      builder = Builder.new
+      builder.instance_eval(&block)
+      builder.build_workflow
+    end
+
     class Builder
-      attr_reader :states, :special_states, :transitions, :config, :object_type, :validations
+      attr_reader :states, :transitions, :validations, :object_type
 
-      # Initialize a new workflow builder
-      # @param object_type [String, nil] Optional type of objects flowing through the workflow
-      def initialize(object_type = nil)
-        @object_type = object_type
+      def initialize
         @states = []
-        @special_states = []
-        @transitions = {}
+        @transitions = []
         @validations = []
-        @config = {
-          nats_url: ENV['NATS_URL'] || 'nats://localhost:4222',
-          log_level: ENV['LOG_LEVEL'] || 'info',
-          metrics_enabled: ENV.fetch('METRICS_ENABLED', 'true') == 'true',
-          retry_attempts: ENV.fetch('RETRY_ATTEMPTS', '3').to_i
-        }
       end
 
-      # Configure the workflow using a block
-      # @param block [Proc] Configuration block
-      def configure(&block)
-        instance_eval(&block) if block_given?
-      end
-
-      # Set the type of objects that can flow through the workflow
-      # @param type [String] Object type name
       def for_object(type)
         @object_type = type
       end
 
-      # Configure connection settings
-      # @param opts [Hash] Connection options
-      def connection(opts = {})
-        @config.merge!(opts)
-      end
-
-      # Configure metrics settings
-      # @param enabled [Boolean] Whether metrics are enabled
-      # @param opts [Hash] Additional metrics options
-      def metrics(enabled: true, **opts)
-        @config[:metrics_enabled] = enabled
-        @config[:metrics_options] = opts
-      end
-
-      # Configure logging settings
-      # @param level [String] Log level
-      # @param opts [Hash] Additional logging options
-      def logging(level: 'info', **opts)
-        @config[:log_level] = level
-        @config[:log_options] = opts
-      end
-
-      # Define the states in the workflow
-      # @param state_list [Array<Symbol>] List of state names
       def states(*state_list)
         @states.concat(state_list)
       end
 
-      # Define special states that can be entered from multiple places
-      # @param state_list [Array<Symbol>] List of special state names
-      def special_states(*state_list)
-        @special_states.concat(state_list)
+      def flow(transition)
+        Action.new(self, transition.from_state, transition.to_state)
       end
 
-      # Add a validation for a state
-      # @param state [Symbol] State name
-      # @param block [Proc] Validation block
-      def validate(state, &block)
-        @validations << {
-          state: state,
-          block: block
-        }
+      def build_workflow
+        workflow = CircuitBreaker::Workflow.new
+        workflow.states = @states
+        
+        @transitions.each do |t|
+          workflow.add_transition(
+            name: t[:name],
+            from: t[:from],
+            to: t[:to],
+            requires: t[:requires],
+            guard: t[:guard],
+            validate: t[:validate]
+          )
+        end
+        
+        workflow
       end
 
-      # Define a regular flow between two states
-      # @param from [Symbol] Source state
-      # @param to [Symbol] Target state
-      # @param via [Symbol] Transition name
-      # @param requires [Array<Symbol>] Required fields for the transition
-      # @param block [Proc] Optional transition block
-      def flow(from:, to:, via:, requires: nil, &block)
+      def method_missing(method_name, *args, &block)
+        if @states.include?(method_name)
+          flow(method_name)
+        else
+          super
+        end
+      end
+
+      def respond_to_missing?(method_name, include_private = false)
+        @states.include?(method_name) || super
+      end
+
+      def _add_transition(from:, to:, via:, options: {})
         transition = {
           name: via,
           from: from,
           to: to,
-          object_type: @object_type,
-          requires: requires
+          requires: options[:requires],
+          guard: options[:guard],
+          validate: options[:validate]
         }
-        transition[:block] = block if block_given?
-        (@transitions[:regular] ||= []) << transition
-      end
 
-      # Define a multi-state flow (blocking or unblocking)
-      # @param from [Symbol, Array<Symbol>] Source state(s)
-      # @param to [Symbol, Array<Symbol>] Target state(s)
-      # @param to_states [Array<Symbol>] Alternative target states
-      # @param via [Symbol] Transition name
-      # @param requires [Array<Symbol>] Required fields for the transition
-      # @param block [Proc] Optional transition block
-      def multi_flow(from:, to: nil, to_states: nil, via:, requires: nil, &block)
-        target = to || to_states
-        raise ArgumentError, "Must specify either 'to' or 'to_states'" unless target
-
-        if to
-          from_states = Array(from)
-          from_states.each do |from_state|
-            flow(from: from_state, to: to, via: via, requires: requires, &block)
-          end
-        else
-          to_states.each do |to_state|
-            flow(from: from, to: to_state, via: via, requires: requires, &block)
-          end
+        # Add validation if provided
+        if options[:validate]
+          @validations << {
+            state: from,
+            validate: options[:validate]
+          }
         end
+
+        @transitions << transition
+      end
+    end
+
+    class StateTransition
+      attr_reader :from_state, :to_state
+
+      def initialize(from_state, to_state)
+        @from_state = from_state
+        @to_state = to_state
+      end
+    end
+
+    class Action
+      def initialize(builder, from_state, to_state)
+        @builder = builder
+        @from_state = from_state
+        @to_state = to_state
+        @options = {}
       end
 
-      # Load a YAML configuration file
-      # @param file_path [String] Path to YAML file
-      def load_yaml(file_path)
-        yaml = YAML.load_file(file_path)
-        load_config(yaml)
-      end
-
-      # Load a JSON configuration file
-      # @param file_path [String] Path to JSON file
-      def load_json(file_path)
-        json = JSON.parse(File.read(file_path))
-        load_config(json)
-      end
-
-      # Build the final workflow configuration
-      # @return [Hash] Complete workflow configuration
-      def build
-        validate!
-        
-        {
-          places: {
-            states: @states,
-            special_states: @special_states
-          },
-          transitions: {
-            regular: @transitions[:regular] || [],
-            blocking: @transitions[:blocking] || []
-          },
-          config: @config,
-          object_type: @object_type
-        }
-      end
-
-      # Convert the workflow to YAML
-      # @return [String] YAML representation
-      def to_yaml
-        build.to_yaml
-      end
-
-      # Convert the workflow to JSON
-      # @return [String] JSON representation
-      def to_json
-        build.to_json
-      end
-
-      # Load configuration from a hash
-      # @param config [Hash] Configuration hash
-      # @return [Builder] self
-      def load_config(config)
-        config = deep_symbolize_keys(config)
-        @object_type = config[:object_type]
-        @places = config[:places] || {}
-        @states = @places[:states] || []
-        @special_states = @places[:special_states] || []
-        @transitions = config[:transitions] || {}
-        @validations = config[:validations]
-        @config = config[:config] if config[:config]
+      def via(transition_name)
+        @transition_name = transition_name
+        @builder._add_transition(
+          from: @from_state,
+          to: @to_state,
+          via: transition_name,
+          options: @options
+        )
         self
       end
 
-      # Convert all hash keys to symbols recursively
-      # @param obj [Hash, Array, Object] Object to convert
-      # @return [Hash, Array, Object] Converted object
-      def deep_symbolize_keys(obj)
-        case obj
-        when Hash
-          obj.each_with_object({}) do |(key, value), result|
-            result[key.to_sym] = deep_symbolize_keys(value)
-          end
-        when Array
-          obj.map { |item| deep_symbolize_keys(item) }
-        else
-          obj
+      def requires(fields)
+        @options[:requires] = fields
+        self
+      end
+
+      def validate(&block)
+        @options[:validate] = block
+        self
+      end
+
+      def guard(&block)
+        @options[:guard] = block
+        self
+      end
+    end
+
+    class FlowBuilder
+      def initialize(builder, from_state)
+        @builder = builder
+        @from_state = from_state
+      end
+
+      def >>(to_state)
+        @to_state = to_state
+        Action.new(@builder, @from_state, @to_state)
+      end
+
+      # Keep the to method for backward compatibility
+      alias_method :to, :>>
+    end
+
+    class StateFlow
+      def initialize(builder, state)
+        @builder = builder
+        @from_state = state
+      end
+
+      def >(to_state)
+        @to_state = to_state
+        self
+      end
+
+      def via(transition_name, &block)
+        options = {}
+        
+        if block_given?
+          collector = OptionCollector.new
+          collector.instance_eval(&block)
+          options = collector.options
         end
-      end
 
-      private
-
-      # Validate the workflow configuration
-      # @raise [RuntimeError] If validation fails
-      def validate!
-        raise "No states defined" if @states.empty?
-        raise "No transitions defined" if @transitions.empty?
+        @builder._add_transition(
+          from: @from_state,
+          to: @to_state,
+          via: transition_name,
+          options: options
+        )
       end
     end
 
-    # Define a new workflow using a block
-    # @param object_type [String, nil] Optional object type
-    # @param block [Proc] Workflow definition block
-    # @return [Hash] Workflow configuration
-    def self.define(object_type = nil, &block)
-      builder = Builder.new(object_type)
-      builder.configure(&block)
-      builder.build
-    end
+    class OptionCollector
+      attr_reader :options
 
-    # Load a workflow from a YAML file
-    # @param file_path [String] Path to YAML file
-    # @return [Hash] Workflow configuration
-    def self.load_yaml(file_path)
-      builder = Builder.new
-      builder.load_yaml(file_path)
-      builder.build
-    end
+      def initialize
+        @options = {}
+      end
 
-    # Load a workflow from a JSON file
-    # @param file_path [String] Path to JSON file
-    # @return [Hash] Workflow configuration
-    def self.load_json(file_path)
-      builder = Builder.new
-      builder.load_json(file_path)
-      builder.build
+      def requires(fields)
+        @options[:requires] = fields
+      end
+
+      def validate(&block)
+        @options[:validate] = block
+      end
+
+      def guard(&block)
+        @options[:guard] = block
+      end
     end
   end
 end
