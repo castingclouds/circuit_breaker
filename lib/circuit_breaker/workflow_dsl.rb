@@ -6,101 +6,20 @@ module CircuitBreaker
       end
     end
 
-    def self.define(&block)
-      builder = WorkflowBuilder.new
+    def self.define(rules: nil, &block)
+      builder = WorkflowBuilder.new(rules)
       builder.instance_eval(&block)
       builder.build_workflow
-    end
-
-    class ValidationBuilder
-      def initialize(builder)
-        @builder = builder
-        @validations = []
-      end
-
-      def title
-        FieldValidator.new(:title, @validations)
-      end
-
-      def content
-        FieldValidator.new(:content, @validations)
-      end
-
-      def tags
-        FieldValidator.new(:tags, @validations)
-      end
-
-      def priority
-        FieldValidator.new(:priority, @validations)
-      end
-
-      def validations
-        @validations
-      end
-    end
-
-    class FieldValidator
-      def initialize(field, validations)
-        @field = field
-        @validations = validations
-      end
-
-      def must_be_present
-        @validations << {
-          field: @field,
-          type: :presence,
-          validate: ->(value) { !value.nil? && !value.to_s.empty? }
-        }
-        self
-      end
-
-      def must_start_with_capital
-        @validations << {
-          field: @field,
-          type: :format,
-          validate: ->(value) { value.to_s.match?(/^[A-Z]/) }
-        }
-        self
-      end
-
-      def minimum_length(length)
-        @validations << {
-          field: @field,
-          type: :length,
-          validate: ->(value) { value.to_s.length >= length }
-        }
-        self
-      end
-
-      def must_match(pattern)
-        @validations << {
-          field: @field,
-          type: :format,
-          validate: ->(value) { 
-            value.is_a?(Array) ? value.all? { |v| v.to_s.match?(pattern) } : value.to_s.match?(pattern)
-          }
-        }
-        self
-      end
-
-      def must_be_one_of(values)
-        @validations << {
-          field: @field,
-          type: :inclusion,
-          validate: ->(value) { values.include?(value.to_s.downcase) }
-        }
-        self
-      end
     end
 
     class WorkflowBuilder
       include Validators
 
-      def initialize
+      def initialize(rules = nil)
         @states = []
         @transitions = {}
         @before_flows = []
-        @rules = []
+        @rules = rules || []
       end
 
       def states(*states)
@@ -129,56 +48,53 @@ module CircuitBreaker
         self
       end
 
-      def validates(*fields)
+      def validate(*field_names)
         raise "No current transition name" unless @current_name
-        @transitions[@current_name][:required_fields] ||= []
-        @transitions[@current_name][:required_fields].concat(fields)
+        @transitions[@current_name][:guard] = ->(token) { validators.chain(token).validate(*field_names).valid? }
+        @transitions[@current_name][:validations] = field_names
         self
       end
-      alias_method :needs, :validates
 
-      def rule(*rule_names)
+      def validate_any(*field_names)
         raise "No current transition name" unless @current_name
-        @transitions[@current_name][:rules] ||= []
-        @transitions[@current_name][:rules].concat(rule_names)
-        self
-      end
-      alias_method :rules, :rule
-
-      def before_flow(&block)
-        @before_flows << block
+        @transitions[@current_name][:guard] = ->(token) { validators.chain(token).or_validate(*field_names).valid? }
+        @transitions[@current_name][:validations_any] = field_names
         self
       end
 
-      def validate_with(validators)
-        @validators = validators.validators
-        before_flow do |token|
-          @validators.each do |field, validator|
-            result = validator.call(token)
-            case result
-            when ValidationResult
-              unless result.valid?
-                raise Token::ValidationError, "Invalid #{field}: #{result}"
-              end
-            when Proc
-              validator_result = result.call(token)
-              unless validator_result
-                raise Token::ValidationError, "Invalid #{field}"
-              end
-            else
-              raise Token::ValidationError, "Invalid validator type for #{field}"
-            end
-          end
-        end
+      def rules(*rule_names)
+        raise "No current transition name" unless @current_name
+        @transitions[@current_name][:guard] = ->(token) { 
+          rule_names.all? { |rule| @rules.evaluate(rule, token) }
+        }
+        @transitions[@current_name][:rules] = rule_names
+        self
+      end
+
+      def rules_any(*rule_names)
+        raise "No current transition name" unless @current_name
+        @transitions[@current_name][:guard] = ->(token) { 
+          rule_names.any? { |rule| @rules.evaluate(rule, token) }
+        }
+        @transitions[@current_name][:rules_any] = rule_names
+        self
+      end
+
+      def guard(&block)
+        raise "No current transition name" unless @current_name
+        @transitions[@current_name][:guard] = block
+        self
       end
 
       def build_workflow
-        Workflow.new(
+        workflow = Workflow.new(
           states: @states,
           transitions: @transitions,
           before_flows: @before_flows,
           rules: @rules
         )
+        workflow.extend(PrettyPrint)
+        workflow
       end
     end
 
@@ -197,113 +113,56 @@ module CircuitBreaker
           StateTransition.new(from_state, other)
         end
       end
-    end
 
-    class Action
-      def initialize(builder, from_state, to_state)
-        @builder = builder
-        @from_state = from_state
-        @to_state = to_state
-        @options = {}
-      end
-
-      def transition(name)
-        @transition_name = name
-        @builder._add_transition(
-          from: @from_state,
-          to: @to_state,
-          via: name,
-          options: @options
-        )
-        self
-      end
-      alias_method :via, :transition
-      alias_method :named, :transition
-
-      def validates(*fields)
-        @options[:requires] = fields.flatten
-        self
-      end
-      alias_method :requires, :validates
-
-      def rule(rule_name)
-        @options[:rule] = rule_name
-        self
-      end
-
-      def when(&block)
-        @options[:validate] = block
-        self
-      end
-      alias_method :validate, :when
-
-      def guard(&block)
-        @options[:guard] = block
-        self
+      def ==(other)
+        return false unless other.is_a?(Symbol) || other.is_a?(StateTransition)
+        other_state = other.is_a?(Symbol) ? other : other.from_state
+        from_state == other_state
       end
     end
 
-    class FlowBuilder
-      def initialize(builder, from_state)
-        @builder = builder
-        @from_state = from_state
-      end
-
-      def >>(to_state)
-        @to_state = to_state
-        Action.new(@builder, @from_state, @to_state)
-      end
-
-      # Keep the to method for backward compatibility
-      alias_method :to, :>>
-    end
-
-    class StateFlow
-      def initialize(builder, state)
-        @builder = builder
-        @from_state = state
-      end
-
-      def >(to_state)
-        @to_state = to_state
-        self
-      end
-
-      def via(transition_name, &block)
-        options = {}
-        
-        if block_given?
-          collector = OptionCollector.new
-          collector.instance_eval(&block)
-          options = collector.options
+    module PrettyPrint
+      def pretty_print
+        puts "\nWorkflow States and Transitions:"
+        puts "=============================="
+        @states.each do |state|
+          puts "State: #{state}"
+          transitions_from_state = @transitions.select { |_, t| t[:from] == state }
+          if transitions_from_state.any?
+            transitions_from_state.each do |name, transition|
+              puts "  └─> #{transition[:to]} (via :#{name})"
+              if transition[:rules]
+                puts "      Required rules: #{transition[:rules].join(', ')}"
+                transition[:rules].each do |rule|
+                  desc = @rules.description(rule)
+                  puts "        - #{desc}" if desc
+                end
+              end
+              if transition[:rules_any]
+                puts "      Any of these rules: #{transition[:rules_any].join(', ')}"
+                transition[:rules_any].each do |rule|
+                  desc = @rules.description(rule)
+                  puts "        - #{desc}" if desc
+                end
+              end
+              if transition[:validations]
+                puts "      Required validations: #{transition[:validations].join(', ')}"
+                transition[:validations].each do |validation|
+                  desc = @validators.description(validation)
+                  puts "        - #{desc}" if desc
+                end
+              end
+              if transition[:validations_any]
+                puts "      Any of these validations: #{transition[:validations_any].join(', ')}"
+                transition[:validations_any].each do |validation|
+                  desc = @validators.description(validation)
+                  puts "        - #{desc}" if desc
+                end
+              end
+            end
+          end
+          puts
         end
-
-        @builder._add_transition(
-          from: @from_state,
-          to: @to_state,
-          via: transition_name,
-          options: options
-        )
-      end
-    end
-
-    class OptionCollector
-      attr_reader :options
-
-      def initialize
-        @options = {}
-      end
-
-      def requires(fields)
-        @options[:requires] = fields
-      end
-
-      def validate(&block)
-        @options[:validate] = block
-      end
-
-      def guard(&block)
-        @options[:guard] = block
       end
     end
   end

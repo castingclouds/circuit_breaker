@@ -10,18 +10,20 @@ module CircuitBreaker
       end
 
       def self.define_token_validators(&block)
-        new.tap do |dsl| 
-          dsl.extend(TokenValidators)
-          dsl.instance_eval(&block)
-        end
+        dsl = new
+        dsl.extend(TokenValidators)
+        dsl.instance_eval(&block)
+        dsl
       end
 
       def initialize
         @validators = {}
+        @descriptions = {}
       end
 
-      def validator(name, &block)
+      def validator(name, desc: nil, &block)
         @validators[name] = block
+        @descriptions[name] = desc if desc
       end
 
       def evaluate(field, token)
@@ -39,8 +41,48 @@ module CircuitBreaker
         end
       end
 
+      def chain(token)
+        ValidationChain.new(self, token)
+      end
+
       def validators
-        @validators
+        @validators.keys
+      end
+
+      def description(name)
+        @descriptions[name]
+      end
+    end
+
+    class ValidationChain
+      def initialize(dsl, token)
+        @dsl = dsl
+        @token = token
+        @result = ValidationResult.new(true)
+      end
+
+      def validate(*fields)
+        fields.each do |field|
+          @result = @result & @dsl.evaluate(field, @token)
+        end
+        self
+      end
+
+      def or_validate(*fields)
+        sub_result = ValidationResult.new(false)
+        fields.each do |field|
+          sub_result = sub_result | @dsl.evaluate(field, @token)
+        end
+        @result = @result & sub_result
+        self
+      end
+
+      def valid?
+        @result.valid?
+      end
+
+      def errors
+        @result.errors
       end
     end
 
@@ -70,6 +112,13 @@ module CircuitBreaker
         ->(token) {
           value = token.send(field)
           Rules.inclusion(values).call(value)
+        }
+      end
+
+      def custom(field, message = nil, &block)
+        ->(token) {
+          result = block.call(token)
+          ValidationResult.new(result, result ? nil : message || "custom validation failed for #{field}")
         }
       end
 

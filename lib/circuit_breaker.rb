@@ -169,7 +169,7 @@ module CircuitBreaker
       @transitions = {}
       @validators = {}
       @tokens = Set.new
-      @rules = RulesEngine::DSL.define_workflow_rules
+      @rules = rules || RulesEngine::DSL.define
 
       # Initialize transitions
       transitions.each do |transition, data|
@@ -223,7 +223,8 @@ module CircuitBreaker
     end
 
     def add_rule(transition, rule)
-      @transitions[transition][:rule] = rule
+      @transitions[transition][:rules] ||= []
+      @transitions[transition][:rules] << rule
     end
 
     def add_token(token)
@@ -256,9 +257,13 @@ module CircuitBreaker
         end
       end
       
-      # Validate transition rule
-      unless transition[:rule].nil? || @rules.evaluate(transition[:rule], token)
-        raise Token::TransitionError, "Transition #{transition_name} not valid for token"
+      # Validate transition rules
+      if transition[:rules]
+        transition[:rules].each do |rule|
+          unless @rules.evaluate(rule, token)
+            raise Token::TransitionError, "Rule '#{rule}' failed for transition #{transition_name}"
+          end
+        end
       end
 
       # Update token state

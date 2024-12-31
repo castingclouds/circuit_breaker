@@ -1,10 +1,10 @@
 # Document Workflow Examples
 
-This directory contains examples demonstrating how to use the Circuit Breaker library to implement a document workflow system. The examples showcase various features including state management, validation rules, event handling, and workflow visualization.
+This directory contains examples demonstrating how to use the Circuit Breaker library to implement a document workflow system. The examples showcase a declarative DSL for defining workflows, rules, and validations.
 
 ## Overview
 
-The document workflow system implements a simple document review and approval process with the following states:
+The document workflow system implements a document review and approval process with the following states:
 - `draft`: Initial state for new documents
 - `pending_review`: Document submitted for review
 - `reviewed`: Review completed with comments
@@ -13,112 +13,154 @@ The document workflow system implements a simple document review and approval pr
 
 ## Example Files
 
-### `token_example.rb`
-Defines the `Document` class that inherits from `CircuitBreaker::Token`. It demonstrates:
-- State transitions and validation rules
-- Attribute validation (title, content, tags, etc.)
-- Event handling and hooks
-- Timing tracking (submission, review, approval times)
+### `document_dsl.rb`
+Demonstrates the declarative workflow DSL that defines:
+- State transitions with rules and validations
+- Pretty printing of workflow definitions
+- Complete workflow execution
 
-### `workflow_example.rb`
-Shows a complete document workflow lifecycle including:
-- Document creation with metadata
-- State transitions (submit → review → approve)
-- Event handling and notifications
-- Workflow visualization export
-- History tracking
+### `document_rules.rb`
+Shows our enhanced rules DSL with natural language definitions:
+```ruby
+# Reviewer rules
+rule :has_reviewer,
+     desc: "Document must have a reviewer assigned",
+     &requires(:reviewer_id)
 
-### `rules_example.rb`
-Demonstrates various validation rules and constraints:
-- Title validation (required, capitalization)
-- Content length requirements
-- Reviewer/approver validation (prevent self-review)
-- Metadata validation (tags, priority)
-- State-specific validation rules
-
-## Running the Examples
-
-Each example can be run independently:
-
-```bash
-# Run the complete workflow example
-ruby workflow_example.rb
-
-# Run the validation rules example
-ruby rules_example.rb
-
-# Run the visualization example
-ruby visualization_example.rb
+rule :different_reviewer,
+     desc: "Reviewer must be different from author",
+     &must_be_different(:reviewer_id, :author_id)
 ```
 
-## Key Features Demonstrated
+Available rule builders:
+- `requires(field)` - Ensures a field is present and not empty
+- `must_be_different(field1, field2)` - Ensures two fields have different values
+- `must_be(field, value)` - Ensures a field equals a specific value
+- `must_start_with(field, prefix)` - Ensures a field starts with a prefix
 
-### State Management
-- DSL-based workflow definition
-- State transitions with validation
-- Guard conditions and requirements
+### `document_validators.rb`
+Demonstrates our enhanced validation DSL:
+```ruby
+# Basic document information
+validator :title,
+         desc: "Document title is required",
+         &must_be_present(:title)
 
-### Validation Rules
-- Attribute-level validation
-- State-specific validation
-- Transition rules
-- Custom validation logic
+validator :priority,
+         desc: "Priority must be low, medium, or high",
+         &must_be_one_of(:priority, %w[low medium high])
+```
 
-### Event Handling
-- Before/after transition hooks
-- Attribute change tracking
-- Async event handlers
-- Audit logging
+Available validator builders:
+- `must_be_present(field)` - Ensures a field is present
+- `must_be_one_of(field, values)` - Ensures a field's value is in a set
+- `must_be_url(field)` - Validates URL format
+- `must_have_min_words(field, min_count)` - Validates minimum word count
 
-### Timing and History
-- Submission time tracking
-- Review duration calculation
-- Total processing time
-- Complete audit history
+### `document_token.rb`
+Defines the document data structure and attributes that are validated and tracked through the workflow.
 
-### Visualization
-- Multiple output formats (HTML, Mermaid, DOT)
-- State diagram generation
-- Transition visualization
-- Workflow documentation
+## Running the Example
+
+Run the complete workflow example:
+```bash
+ruby document_dsl.rb
+```
+
+This will show:
+1. A pretty-printed workflow definition showing:
+   - All states and their transitions
+   - Required rules with descriptions
+   - Required validations with descriptions
+2. A complete workflow execution demonstrating:
+   - Document submission with reviewer
+   - Review process with comments
+   - Final approval with approver
+
+## Key Features
+
+### Declarative DSL
+- Natural language rule definitions
+- Clear validation requirements
+- Descriptive error messages
+- Pretty-printed workflow visualization
+
+### Rules Engine
+- Field presence rules
+- Field comparison rules
+- Value matching rules
+- Custom rule definitions
+
+### Validation System
+- Field presence validation
+- Value inclusion validation
+- URL format validation
+- Word count validation
+
+### Workflow Management
+- State transition management
+- Rule enforcement
+- Validation checking
+- History tracking
+
+## Example Workflow Output
+
+```
+Workflow States and Transitions:
+==============================
+State: draft
+  └─> pending_review (via :submit)
+      Required rules: has_reviewer, different_reviewer
+        - Document must have a reviewer assigned
+        - Reviewer must be different from author
+
+State: pending_review
+  └─> reviewed (via :review)
+      Required rules: has_comments
+        - Review must include comments
+
+State: reviewed
+  └─> approved (via :approve)
+      Required rules: has_approver, different_approver_from_reviewer
+        - Document must have an approver assigned
+        - Approver must be different from reviewer
+  └─> rejected (via :reject)
+      Required rules: has_rejection
+        - Rejection must include a reason
+```
 
 ## Implementation Details
 
-The examples use the Circuit Breaker library's core features:
-- `CircuitBreaker::Token` for state and attribute management
-- `CircuitBreaker::WorkflowDSL` for workflow definition
-- Petri net-based state machine implementation
-- Event system for notifications and logging
+The system is built on several core components:
+- `CircuitBreaker::WorkflowDSL` - Defines the workflow structure and transitions
+- `CircuitBreaker::RulesEngine` - Manages and evaluates business rules
+- `CircuitBreaker::Validators` - Handles field and state validations
+- `CircuitBreaker::Token` - Represents the document state and data
 
-## Example Workflow
+Each component uses a declarative DSL to make definitions clear and maintainable:
+- Rules are defined with clear descriptions of their purpose
+- Validations specify their requirements in natural language
+- Workflows show a clear visualization of states and transitions
+- Error messages are descriptive and actionable
 
-1. Create a new document with title, content, and metadata
-2. Submit for review (requires reviewer ID)
-3. Add review comments (requires minimum length)
-4. Approve or reject (requires different approver)
-5. Track timing and history throughout
+## Best Practices
 
-The workflow enforces business rules such as:
-- No self-review or self-approval
-- Minimum content length requirements
-- Required fields for each state
-- Valid metadata formats
+1. **Rule Definition**
+   - Give each rule a clear description
+   - Use the most specific rule builder
+   - Group related rules together
 
-## Extending the Examples
+2. **Validation Definition**
+   - Describe the validation requirement clearly
+   - Use appropriate validation builders
+   - Group validations by purpose
 
-You can extend these examples by:
-1. Adding new states or transitions
-2. Implementing additional validation rules
-3. Creating custom event handlers
-4. Adding new visualization formats
-5. Implementing more complex workflows
+3. **Workflow Definition**
+   - Define clear state transitions
+   - Attach appropriate rules to transitions
+   - Use descriptive transition names
 
-## Error Handling
-
-The examples demonstrate proper error handling for:
-- Invalid state transitions
-- Validation failures
-- Missing required fields
-- Business rule violations
-
-Each error includes descriptive messages to help identify and fix issues.
+4. **Error Handling**
+   - Provide clear error messages
+   - Validate early and often
+   - Give actionable feedback
