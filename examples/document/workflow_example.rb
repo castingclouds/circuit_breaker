@@ -83,8 +83,9 @@ module Examples
 
         # Export workflow visualization
         puts "\nExporting workflow visualization..."
-        File.write("workflow.html", CircuitBreaker::Document.visualize(:html))
-        puts "Workflow diagram exported to workflow.html"
+        output_file = File.join(File.dirname(__FILE__), 'workflow.html')
+        File.write(output_file, CircuitBreaker::Document.visualize(:html))
+        puts "Workflow diagram exported to #{File.basename(output_file)}"
 
         # Print final history
         puts "\nDocument History:"

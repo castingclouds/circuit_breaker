@@ -1,5 +1,5 @@
 require_relative '../../lib/circuit_breaker'
-require_relative 'document_token'
+require_relative 'token_example'
 
 # Example demonstrating various visualization formats for the document workflow
 module Examples
@@ -11,50 +11,58 @@ module Examples
       # Create a sample document with history
       doc = create_sample_document
 
+      output_dir = File.dirname(__FILE__)
+
       puts "\n1. Generating Mermaid.js Diagram"
       puts "------------------------------"
       mermaid_code = CircuitBreaker::Document.visualize(:mermaid)
-      File.write("document_workflow_mermaid.html", create_mermaid_html(mermaid_code))
-      puts "✓ Mermaid diagram saved to document_workflow_mermaid.html"
+      output_file = File.join(output_dir, 'document_workflow_mermaid.html')
+      File.write(output_file, create_mermaid_html(mermaid_code))
+      puts "✓ Mermaid diagram saved to #{File.basename(output_file)}"
       puts "\nMermaid Code:"
       puts mermaid_code
 
       puts "\n2. Generating PlantUML Diagram"
       puts "----------------------------"
       plantuml_code = CircuitBreaker::Document.visualize(:plantuml)
-      File.write("document_workflow_plantuml.txt", plantuml_code)
-      puts "✓ PlantUML code saved to document_workflow_plantuml.txt"
+      output_file = File.join(output_dir, 'document_workflow_plantuml.txt')
+      File.write(output_file, plantuml_code)
+      puts "✓ PlantUML code saved to #{File.basename(output_file)}"
       puts "\nPlantUML Code:"
       puts plantuml_code
 
       puts "\n3. Generating DOT Graph"
       puts "----------------------"
       dot_code = CircuitBreaker::Document.visualize(:dot)
-      File.write("document_workflow.dot", dot_code)
-      puts "✓ DOT graph saved to document_workflow.dot"
+      output_file = File.join(output_dir, 'document_workflow.dot')
+      File.write(output_file, dot_code)
+      puts "✓ DOT graph saved to #{File.basename(output_file)}"
       puts "\nDOT Code:"
       puts dot_code
 
       puts "\n4. Generating Markdown Documentation"
       puts "---------------------------------"
       markdown = CircuitBreaker::Document.visualize(:markdown)
-      File.write("document_workflow.md", markdown)
-      puts "✓ Markdown documentation saved to document_workflow.md"
+      output_file = File.join(output_dir, 'document_workflow.md')
+      File.write(output_file, markdown)
+      puts "✓ Markdown documentation saved to #{File.basename(output_file)}"
       
       puts "\n5. Generating Timeline Visualization"
       puts "--------------------------------"
       timeline_html = doc.export_history_as_timeline
-      File.write("document_timeline.html", timeline_html)
-      puts "✓ Timeline visualization saved to document_timeline.html"
+      output_file = File.join(output_dir, 'document_timeline.html')
+      File.write(output_file, timeline_html)
+      puts "✓ Timeline visualization saved to #{File.basename(output_file)}"
 
       puts "\n6. Generating Combined HTML Documentation"
       puts "-------------------------------------"
       html = create_combined_html(doc, mermaid_code, plantuml_code, dot_code, markdown)
-      File.write("document_workflow.html", html)
-      puts "✓ Combined HTML documentation saved to document_workflow.html"
+      output_file = File.join(output_dir, 'document_workflow.html')
+      File.write(output_file, html)
+      puts "✓ Combined HTML documentation saved to #{File.basename(output_file)}"
 
       puts "\nAll visualizations have been generated successfully!"
-      puts "Open document_workflow.html in your browser to view all formats."
+      puts "Open #{File.basename(output_file)} in your browser to view all formats."
     end
 
     private

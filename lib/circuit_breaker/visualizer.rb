@@ -18,8 +18,12 @@ module CircuitBreaker
           lines << "    #{state}"
           if validations[state]
             lines << "    note right of #{state}"
-            lines << "      Validations:"
-            lines << "      - #{validations[state].source_location.first}"
+            # Get the file path relative to the project root
+            validation_file = validations[state].source_location.first
+            relative_path = validation_file.sub(File.expand_path('../../..', __FILE__), '')
+            relative_path = relative_path.start_with?('/') ? relative_path[1..-1] : relative_path
+            lines << "      Validations in:"
+            lines << "      #{relative_path}"
             lines << "    end note"
           end
         end
@@ -110,39 +114,40 @@ module CircuitBreaker
 
       def to_markdown(token_class)
         transitions = token_class.state_transitions
+        states = transitions.keys.concat(transitions.values.flatten).uniq
         validations = token_class.state_validations
-        
-        lines = ["# State Machine Documentation"]
-        lines << "\n## States"
-        
-        # Document states and their validations
-        transitions.keys.concat(transitions.values.flatten).uniq.sort.each do |state|
-          lines << "\n### #{state}"
-          if validation = validations[state]
-            lines << "\nValidations:"
-            lines << "```ruby"
-            lines << validation.source
-            lines << "```"
+
+        lines = ["# #{token_class.name} Workflow\n"]
+        lines << "## States\n"
+
+        states.each do |state|
+          lines << "### #{state.to_s.capitalize}\n"
+          if validations[state]
+            lines << "**Validations:**\n"
+            lines << "- State-specific validation rules are enforced\n"
           end
+          lines << "\n"
         end
-        
-        # Document transitions
-        lines << "\n## Transitions"
+
+        lines << "## Transitions\n"
         transitions.each do |from, to_states|
-          lines << "\n### From: #{from}"
-          lines << "\nCan transition to:"
-          to_states.sort.each do |to|
-            lines << "- #{to}"
+          to_states.each do |to|
+            lines << "### #{from} → #{to}\n"
+            if token_class.transition_rules[[from, to]]
+              lines << "**Rules:**\n"
+              lines << "- Transition-specific validation rules are enforced\n"
+            end
+            lines << "\n"
           end
         end
-        
-        # Add Mermaid diagram
-        lines << "\n## Visual Representation"
-        lines << "\n```mermaid"
-        lines << to_mermaid(token_class)
-        lines << "```"
-        
-        lines.join("\n")
+
+        lines << "## Hooks\n"
+        lines << "### Before Transition\n"
+        lines << "- #{token_class.before_transition_hooks.size} hooks registered\n\n"
+        lines << "### After Transition\n"
+        lines << "- #{token_class.after_transition_hooks.size} hooks registered\n\n"
+
+        lines.join
       end
 
       def save(token_class, format:, filename:)
