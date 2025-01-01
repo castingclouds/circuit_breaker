@@ -65,6 +65,120 @@ module CircuitBreaker
         transition_rules[[from, to]] = block
       end
 
+      # Enhanced DSL methods
+      def states(*state_list)
+        state_list.each do |state|
+          state_transitions[state] ||= []
+        end
+        
+        # Define predicate methods for states
+        state_list.each do |state|
+          define_method("#{state}?") do
+            @state == state
+          end
+        end
+
+        const_set(:VALID_STATES, state_list.freeze)
+      end
+
+      def validate_attribute(name, &block)
+        attribute_validations[name] = block
+      end
+
+      def attribute(name, type = nil, **options)
+        # Add to list of attributes
+        attributes << name
+
+        # Define the attribute accessor
+        attr_accessor name
+
+        # Define the validator if type is specified
+        if type
+          validate_attribute name do |value|
+            next true if value.nil?
+            next false unless value.is_a?(type)
+            
+            if options[:allowed]
+              options[:allowed].include?(value)
+            else
+              true
+            end
+          end
+        end
+      end
+
+      def attributes
+        @attributes ||= []
+      end
+
+      def track_timestamp(*fields, on_state: nil, on_states: nil)
+        states = on_states || [on_state]
+        states.compact.each do |state|
+          state_timestamps[state] ||= []
+          state_timestamps[state].concat(fields)
+        end
+        attr_accessor(*fields)
+      end
+
+      def state_timestamps
+        @state_timestamps ||= {}
+      end
+
+      def state_messages
+        @state_messages ||= {}
+      end
+
+      # Default state message if none specified
+      def default_state_message
+        @default_state_message ||= ->(token, from, to) { "State changed from #{from} to #{to}" }
+      end
+
+      def default_state_message=(block)
+        @default_state_message = block
+      end
+
+      def state_message(for_state:, &block)
+        state_messages[for_state] = block
+      end
+
+      # Combined state configuration
+      def state_config(state, timestamps: nil, message: nil, &block)
+        # Handle timestamps
+        if timestamps
+          track_timestamp(*Array(timestamps), on_state: state)
+        end
+
+        # Handle message
+        if block_given?
+          state_message(for_state: state, &block)
+        elsif message
+          state_message(for_state: state) { |token| message }
+        end
+      end
+
+      # Multiple state configuration
+      def state_configs(&block)
+        config_dsl = StateConfigDSL.new(self)
+        config_dsl.instance_eval(&block)
+      end
+
+      # DSL for state configuration
+      class StateConfigDSL
+        def initialize(token_class)
+          @token_class = token_class
+        end
+
+        def state(name, timestamps: nil, message: nil, &block)
+          @token_class.state_config(name, timestamps: timestamps, message: message, &block)
+        end
+
+        def on_states(states, timestamps:)
+          Array(timestamps).each do |timestamp|
+            @token_class.track_timestamp(timestamp, on_states: states)
+          end
+        end
+      end
+
       # Visualization methods
       def visualize(format = :mermaid)
         case format
@@ -82,42 +196,43 @@ module CircuitBreaker
           raise ArgumentError, "Unsupported format: #{format}"
         end
       end
-
-      def define_attribute(name, type = nil, **options)
-        define_method(name) do
-          instance_variable_get("@#{name}")
-        end
-
-        define_method("#{name}=") do |value|
-          old_value = instance_variable_get("@#{name}")
-          
-          # Type validation
-          if type && !value.nil?
-            unless value.is_a?(type)
-              raise ValidationError, "Invalid type for #{name}: expected #{type}, got #{value.class}"
-            end
-          end
-
-          # Custom validation
-          if options[:validate]
-            result = options[:validate].call(value)
-            case result
-            when false
-              raise ValidationError, "Invalid value for #{name}"
-            when String
-              raise ValidationError, result
-            end
-          end
-
-          instance_variable_set("@#{name}", value)
-          notify(:attribute_changed, attribute: name, old_value: old_value, new_value: value)
-        end
-      end
     end
 
     def initialize(attributes = {})
       @id = SecureRandom.uuid
-      @state = attributes.delete(:state) || :draft
+      @state = self.class::VALID_STATES.first
+      
+      # Initialize all attributes to nil
+      self.class.attributes.each do |attr|
+        instance_variable_set("@#{attr}", nil)
+      end
+
+      # Set provided attributes
+      attributes.each do |key, value|
+        send("#{key}=", value) if respond_to?("#{key}=")
+      end
+
+      # Add default transition hook for timestamps and history
+      self.class.before_transition do |from, to|
+        # Set timestamps for the target state
+        if (timestamp_fields = self.class.state_timestamps[to.to_sym])
+          timestamp_fields.each do |field|
+            send("#{field}=", Time.now)
+          end
+        end
+
+        # Record the transition in history with details
+        record_event(
+          :state_transition,
+          {
+            from: from,
+            to: to,
+            timestamp: Time.now,
+            details: state_change_details(from, to)
+          }
+        )
+      end
+
       @created_at = Time.now
       @updated_at = @created_at
       @event_handlers = Hash.new { |h, k| h[k] = [] }
@@ -125,11 +240,6 @@ module CircuitBreaker
       @observers = Hash.new { |h, k| h[k] = [] }
       @async_observers = Hash.new { |h, k| h[k] = [] }
       @history = []
-      
-      # Initialize instance variables from attributes
-      attributes.each do |key, value|
-        instance_variable_set("@#{key}", value)
-      end
     end
 
     def update_state(new_state, actor_id: nil)
@@ -329,32 +439,38 @@ module CircuitBreaker
     end
 
     def method_missing(method_name, *args)
-      var_name = "@#{method_name}"
-      if instance_variable_defined?(var_name)
-        instance_variable_get(var_name)
+      # Check if it's a setter method (ends with =)
+      if method_name.to_s.end_with?('=')
+        attr_name = method_name.to_s.chomp('=')
+        if self.class.attributes.include?(attr_name.to_sym)
+          self.class.send(:attr_accessor, attr_name.to_sym)
+          send(method_name, *args)
+        else
+          super
+        end
       else
         super
       end
     end
 
     def respond_to_missing?(method_name, include_private = false)
-      instance_variable_defined?("@#{method_name}") || super
+      # Check if it's a setter method (ends with =)
+      if method_name.to_s.end_with?('=')
+        attr_name = method_name.to_s.chomp('=')
+        self.class.attributes.include?(attr_name.to_sym)
+      else
+        super
+      end
     end
 
-    def has_reviewer?
-      !reviewer_id.nil?
-    end
+    private
 
-    def has_comments?
-      !reviewer_comments.to_s.empty?
-    end
-
-    def has_different_approver?
-      approver_id && approver_id != reviewer_id
-    end
-
-    def has_rejection_reason?
-      !rejection_reason.to_s.empty?
+    def state_change_details(from, to)
+      if (message_block = self.class.state_messages[to.to_sym])
+        message_block.call(self)
+      else
+        self.class.default_state_message.call(self, from, to)
+      end
     end
   end
 end
