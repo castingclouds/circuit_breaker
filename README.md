@@ -242,6 +242,93 @@ end
    - DAG: Tasks typically execute exactly once
    - Petri Net: Places can receive tokens multiple times
 
+## Example Walkthrough: Document Approval
+
+Let's walk through a complete document approval workflow:
+
+### 1. Setup Workflow and Token
+```ruby
+# Define the workflow
+workflow = CircuitBreaker::WorkflowDSL.define do
+  states :draft, :pending_review, :reviewed, :approved, :rejected
+  
+  flow(:draft >> :pending_review)
+    .transition(:submit)
+    .policy(
+      validations: { all: [:reviewer_id] },
+      rules: { all: [:has_reviewer] }
+    )
+end
+
+# Create initial document
+token = DocumentToken.new(
+  title: "Project Proposal",
+  content: "Detailed project proposal...",
+  author_id: "alice123"
+)
+
+# Add to workflow (automatically starts in :draft state)
+workflow.add_token(token)
+puts token.state  # => "draft"
+```
+
+### 2. Submit for Review
+```ruby
+# Set required fields for submission
+token.reviewer_id = "bob456"
+
+# Submit document
+workflow.fire_transition(:submit, token)
+puts token.state           # => "pending_review"
+puts token.submitted_at    # => "2025-01-01 13:05:53 -0500"
+puts token.state_message   # => "Document submitted for review by bob456"
+```
+
+### 3. Review Document
+```ruby
+# Add review comments
+token.reviewer_comments = "Good proposal, needs minor revisions"
+
+# Complete review
+workflow.fire_transition(:review, token)
+puts token.state          # => "reviewed"
+puts token.reviewed_at    # => "2025-01-01 13:05:53 -0500"
+puts token.state_message  # => "Document reviewed by bob456 with comments"
+```
+
+### 4. Approval Decision
+```ruby
+# Attempt to approve
+token.approver_id = "admin_eve789"
+
+begin
+  # This will succeed if approver is admin and different from reviewer
+  workflow.fire_transition(:approve, token)
+  puts token.state          # => "approved"
+  puts token.approved_at    # => "2025-01-01 13:05:53 -0500"
+  puts token.completed_at   # => "2025-01-01 13:05:53 -0500"
+  puts token.state_message  # => "Document approved by admin_eve789"
+rescue CircuitBreaker::RulesEngine::RuleValidationError => e
+  # Handle validation failures (e.g., approver not admin)
+  puts "Approval failed: #{e.message}"
+  
+  # Reject instead
+  token.rejection_reason = "Needs major revisions"
+  workflow.fire_transition(:reject, token)
+  puts token.state          # => "rejected"
+  puts token.rejected_at    # => "2025-01-01 13:05:53 -0500"
+  puts token.completed_at   # => "2025-01-01 13:05:53 -0500"
+  puts token.state_message  # => "Document rejected with reason: Needs major revisions"
+end
+```
+
+This walkthrough demonstrates:
+- Token state tracking with timestamps
+- State-specific validation rules
+- Automatic message generation
+- Error handling for rule violations
+- Shared timestamps across states (completed_at)
+
 ## Using the Workflow DSL
 
 The Circuit Breaker provides a powerful DSL for defining workflows with policy-based transitions:
@@ -436,157 +523,102 @@ workflow.fire_transition(:approve, token)
 # => Rule 'different_approver_from_reviewer' evaluated to true
 ```
 
-## Example Walkthrough: Approval Workflow
+## Advanced Patterns
 
-Let's walk through how our example approval workflow works using Petri Nets:
-
-### 1. Initial State
-```ruby
-wf.add_tokens('draft')
-puts wf.marking
-# => {"draft"=>1, "pending_review"=>0, "reviewed"=>0, "approved"=>0, "rejected"=>0}
-```
-- System starts with one token in the 'draft' state
-- All other states are empty
-
-### 2. Submit Transition
-```ruby
-wf.step  # Fires 'submit' transition
-puts wf.marking
-# => {"draft"=>0, "pending_review"=>1, "reviewed"=>0, "approved"=>0, "rejected"=>0}
-```
-- Token moves from 'draft' to 'pending_review'
-- 'submit' transition consumes token from 'draft'
-- 'submit' transition produces token in 'pending_review'
-
-### 3. Review Transition
-```ruby
-wf.step  # Fires 'review' transition
-puts wf.marking
-# => {"draft"=>0, "pending_review"=>0, "reviewed"=>1, "approved"=>0, "rejected"=>0}
-```
-- Token moves from 'pending_review' to 'reviewed'
-- System is now ready for approval decision
-
-### 4. Approval Decision
-```ruby
-# Guard condition determines which transition can fire
-approve.set_guard { true }   # Always approve
-reject.set_guard { false }   # Never reject
-
-wf.step  # Fires 'approve' transition
-puts wf.marking
-# => {"draft"=>0, "pending_review"=>0, "reviewed"=>0, "approved"=>1, "rejected"=>0}
-```
-- Token moves from 'reviewed' to 'approved'
-- Guard conditions determine which transition fires
-- Only one transition can fire, preventing double-approval
-
-### Advanced Patterns
-
-Petri Nets excel at modeling complex patterns that are difficult with DAGs:
+The workflow DSL excels at modeling complex patterns:
 
 1. **Reentrant Workflows**
 ```ruby
-# Allow resubmission from rejected state
-wf.connect('rejected', 'submit')
+workflow = CircuitBreaker::WorkflowDSL.define do
+  states :draft, :pending_review, :reviewed, :rejected
+  
+  # Allow documents to be resubmitted after rejection
+  flow(:draft >> :pending_review).transition(:submit)
+  flow(:rejected >> :draft).transition(:revise)
+  flow(:pending_review >> :reviewed).transition(:review)
+  flow(:reviewed >> :rejected).transition(:reject)
+end
 ```
 
 2. **Parallel Reviews**
 ```ruby
-# Add multiple tokens for parallel reviews
-wf.add_tokens('pending_review', 3)
+class MultiReviewToken < CircuitBreaker::Token
+  # Track multiple reviewers
+  attribute :reviewers, Array
+  attribute :reviews_completed, Integer, default: 0
+  
+  state_configs do
+    state :pending_review,
+          timestamps: :review_started_at,
+          message: ->(t) { "Awaiting #{t.reviewers.count} reviews" }
+          
+    state :reviewed,
+          timestamps: :all_reviews_completed_at,
+          message: ->(t) { "All #{t.reviews_completed} reviews completed" }
+  end
+end
+
+workflow = CircuitBreaker::WorkflowDSL.define do
+  flow(:pending_review >> :reviewed)
+    .transition(:complete_review)
+    .policy(
+      validations: { all: [:reviewer_comments] },
+      rules: { 
+        all: [:has_comments],
+        custom: ->(token) { token.reviews_completed >= 3 }  # Need 3 reviews
+      }
+    )
+end
 ```
 
 3. **Synchronization Points**
 ```ruby
-# Require multiple approvals
-approve.set_guard do
-  reviewed_place.token_count >= 3  # Need 3 review tokens
+class TeamApprovalToken < CircuitBreaker::Token
+  attribute :team_approvals, Array
+  attribute :required_approvals, Integer, default: 3
+  
+  state_configs do
+    state :pending_approval,
+          timestamps: :first_approval_at,
+          message: ->(t) { "#{t.team_approvals.count}/#{t.required_approvals} approvals received" }
+          
+    state :approved,
+          timestamps: :fully_approved_at,
+          message: ->(t) { "Received all #{t.required_approvals} required approvals" }
+  end
+end
+
+workflow = CircuitBreaker::WorkflowDSL.define do
+  flow(:pending_approval >> :approved)
+    .transition(:approve)
+    .policy(
+      rules: {
+        custom: ->(token) { token.team_approvals.count >= token.required_approvals }
+      }
+    )
 end
 ```
 
 4. **State-Based Conditions**
 ```ruby
-# Conditional transitions based on system state
-approve.set_guard do
-  reviewed_place.token_count > 0 && 
-    user.has_permission?(:approve)
-end
-```
-
-These patterns demonstrate how Petri Nets can naturally model complex state-based workflows that would be cumbersome to represent with DAGs.
-
-## Example Usage
-
-```ruby
-require_relative 'lib/circuit_breaker'
-
-# Define your token class
-class DocumentToken < CircuitBreaker::Token
-  # Define valid states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-
-  # Define attributes
-  attribute :title,            String
-  attribute :content,          String
-  attribute :priority,         String, allowed: %w[low medium high urgent]
-  attribute :author_id,        String
-  attribute :reviewer_id,      String
-  attribute :approver_id,      String
-  attribute :word_count,       Integer
-
-  # Configure state behavior
-  state_configs do
-    # Configure pending_review state
-    state :pending_review,
-          timestamps: :submitted_at,
-          message: ->(t) { "Document submitted by #{t.author_id}" }
-
-    # Configure reviewed state
-    state :reviewed,
-          timestamps: :reviewed_at,
-          message: ->(t) { "Document reviewed by #{t.reviewer_id}" }
-
-    # Configure approved state
-    state :approved,
-          timestamps: [:approved_at, :completed_at],
-          message: ->(t) { "Document approved by #{t.approver_id}" }
-  end
-end
-
-# Create workflow
 workflow = CircuitBreaker::WorkflowDSL.define do
-  for_object 'Document'
-  states :draft, :pending_review, :reviewed, :approved
-
-  # Define transitions with policies
-  flow(:draft >> :pending_review)
-    .transition(:submit)
+  flow(:reviewed >> :approved)
+    .transition(:approve)
     .policy(
-      validations: { all: [:title, :content, :author_id] },
-      rules: { all: [:has_author] }
+      validations: { all: [:approver_id] },
+      rules: {
+        all: [:has_approver, :is_admin],
+        custom: ->(token) {
+          # Complex state-based rules
+          token.priority == "high" ||
+          (token.reviews_completed >= 2 && token.all_reviews_positive?)
+        }
+      }
     )
 end
-
-# Create and configure token
-token = DocumentToken.new(
-  title: "Project Proposal",
-  content: "Detailed project proposal...",
-  priority: "high",
-  author_id: "alice123",
-  word_count: 150
-)
-
-# Add token to workflow and execute
-workflow.add_token(token)
-workflow.fire_transition(:submit, token)
-
-# Check token state and history
-puts token.current_state         # => "pending_review"
-puts token.submitted_at         # => "2025-01-01 12:45:57 -0500"
-puts token.state_message        # => "Document submitted by alice123"
 ```
+
+These patterns demonstrate how the workflow DSL can elegantly handle complex state-based workflows through its policy-based rules and token attributes.
 
 ## Differences from Argo Workflows
 
