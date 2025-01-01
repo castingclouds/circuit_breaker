@@ -15,9 +15,36 @@ The document workflow system implements a document review and approval process w
 
 ### `document_dsl.rb`
 Demonstrates the declarative workflow DSL that defines:
-- State transitions with rules and validations
+- State transitions with policy-based rules and validations
 - Pretty printing of workflow definitions
 - Complete workflow execution
+
+Example of policy-based workflow definition:
+```ruby
+flow(:draft >> :pending_review)
+  .transition(:submit)
+  .policy(
+    validations: { all: [:reviewer_id] },
+    rules: { all: [:has_reviewer, :different_reviewer] }
+  )
+
+flow(:reviewed >> :approved)
+  .transition(:approve)
+  .policy(
+    validations: {
+      all: [:approver_id, :reviewer_comments],
+      any: [:external_url, :word_count]
+    },
+    rules: {
+      all: [
+        :has_approver,
+        :different_approver_from_reviewer,
+        :different_approver_from_author
+      ],
+      any: [:is_admin]
+    }
+  )
+```
 
 ### `document_rules.rb`
 Shows our enhanced rules DSL with natural language definitions:
@@ -47,8 +74,8 @@ validator :title,
          &must_be_present(:title)
 
 validator :priority,
-         desc: "Priority must be low, medium, or high",
-         &must_be_one_of(:priority, %w[low medium high])
+         desc: "Priority must be low, medium, high, or urgent",
+         &must_be_one_of(:priority, %w[low medium high urgent])
 ```
 
 Available validator builders:
@@ -79,88 +106,89 @@ This will show:
 
 ## Key Features
 
-### Declarative DSL
-- Natural language rule definitions
-- Clear validation requirements
-- Descriptive error messages
-- Pretty-printed workflow visualization
+### Policy-Based Workflow DSL
+- Declarative policy definitions for transitions
+- Support for complex validation rules:
+  - `all`: All validations must pass
+  - `any`: At least one validation must pass
+- Support for complex rule combinations:
+  - `all`: All rules must pass
+  - `any`: At least one rule must pass
+- Clear error messages showing which policy failed
 
 ### Rules Engine
 - Field presence rules
 - Field comparison rules
 - Value matching rules
 - Custom rule definitions
+- Support for complex rule combinations
 
 ### Validation System
 - Field presence validation
 - Value inclusion validation
 - URL format validation
 - Word count validation
+- Support for complex validation combinations
 
 ### Workflow Management
-- State transition management
-- Rule enforcement
-- Validation checking
-- History tracking
-
-## Example Workflow Output
-
-```
-Workflow States and Transitions:
-==============================
-State: draft
-  └─> pending_review (via :submit)
-      Required rules: has_reviewer, different_reviewer
-        - Document must have a reviewer assigned
-        - Reviewer must be different from author
-
-State: pending_review
-  └─> reviewed (via :review)
-      Required rules: has_comments
-        - Review must include comments
-
-State: reviewed
-  └─> approved (via :approve)
-      Required rules: has_approver, different_approver_from_reviewer
-        - Document must have an approver assigned
-        - Approver must be different from reviewer
-  └─> rejected (via :reject)
-      Required rules: has_rejection
-        - Rejection must include a reason
-```
-
-## Implementation Details
-
-The system is built on several core components:
-- `CircuitBreaker::WorkflowDSL` - Defines the workflow structure and transitions
-- `CircuitBreaker::RulesEngine` - Manages and evaluates business rules
-- `CircuitBreaker::Validators` - Handles field and state validations
-- `CircuitBreaker::Token` - Represents the document state and data
-
-Each component uses a declarative DSL to make definitions clear and maintainable:
-- Rules are defined with clear descriptions of their purpose
-- Validations specify their requirements in natural language
-- Workflows show a clear visualization of states and transitions
-- Error messages are descriptive and actionable
+- Policy-based state transition management
+- Automatic rule and validation conversion
+- Comprehensive error handling
+- Detailed transition history tracking
 
 ## Best Practices
 
-1. **Rule Definition**
-   - Give each rule a clear description
-   - Use the most specific rule builder
-   - Group related rules together
+### 1. Policy Definition
+- Use clear, descriptive rule names
+- Group related rules under `all` or `any`
+- Keep validation requirements clear and focused
+- Use appropriate validation combinations
 
-2. **Validation Definition**
-   - Describe the validation requirement clearly
-   - Use appropriate validation builders
-   - Group validations by purpose
+### 2. Rule Implementation
+- Implement atomic, single-purpose rules
+- Use descriptive rule builders
+- Add debug output for complex rules
+- Test all rule combinations
 
-3. **Workflow Definition**
-   - Define clear state transitions
-   - Attach appropriate rules to transitions
-   - Use descriptive transition names
+### 3. Validation Definition
+- Describe the validation requirement clearly
+- Use appropriate validation builders
+- Group validations by purpose
+- Test edge cases and combinations
 
-4. **Error Handling**
-   - Provide clear error messages
-   - Validate early and often
-   - Give actionable feedback
+### 4. Error Handling
+- Provide clear error messages
+- Include context in validation errors
+- Track failed transitions in history
+- Add debug output for troubleshooting
+
+## Example Use Cases
+
+### Document Review Process
+```ruby
+# Define a document review workflow with:
+# 1. Reviewer different from author
+# 2. Admin approval required
+# 3. Either word count or external URL required
+workflow = CircuitBreaker::WorkflowDSL.define do
+  flow(:draft >> :pending_review)
+    .transition(:submit)
+    .policy(
+      validations: { all: [:reviewer_id] },
+      rules: { all: [:has_reviewer, :different_reviewer] }
+    )
+
+  flow(:reviewed >> :approved)
+    .transition(:approve)
+    .policy(
+      validations: {
+        all: [:approver_id, :reviewer_comments],
+        any: [:external_url, :word_count]
+      },
+      rules: {
+        all: [:has_approver, :different_approver_from_reviewer],
+        any: [:is_admin]
+      }
+    )
+end
+```

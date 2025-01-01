@@ -56,8 +56,14 @@ module CircuitBreaker
         raise "Unknown rule: #{rule_name}" unless @rules.key?(rule_name)
         rule = @rules[rule_name]
         begin
-          rule.call(token)
+          result = rule.call(token)
+          puts "Rule '#{rule_name}' evaluated to #{result} for token #{token.id}"
+          unless result
+            raise RuleValidationError, "Rule '#{rule_name}' failed for token #{token.id}"
+          end
+          result
         rescue StandardError => e
+          puts "Rule '#{rule_name}' failed with error: #{e.message}"
           raise RuleValidationError, "Rule '#{rule_name}' failed for token #{token.id}: #{e.message}"
         end
       end

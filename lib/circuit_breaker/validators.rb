@@ -86,6 +86,33 @@ module CircuitBreaker
       end
     end
 
+    class ValidatorChain
+      def initialize
+        @token = nil
+      end
+
+      def chain(token)
+        @token = token
+        self
+      end
+
+      def validate(*fields)
+        result = fields.all? do |field|
+          value = @token.send(field)
+          !value.nil? && (!value.respond_to?(:empty?) || !value.empty?)
+        end
+        ValidationResult.new(result)
+      end
+
+      def or_validate(*fields)
+        result = fields.any? do |field|
+          value = @token.send(field)
+          !value.nil? && (!value.respond_to?(:empty?) || !value.empty?)
+        end
+        ValidationResult.new(result)
+      end
+    end
+
     module TokenValidators
       def presence(field)
         ->(token) {
@@ -341,6 +368,10 @@ module CircuitBreaker
           ValidationResult.new(errors.empty?, errors)
         }
       end
+    end
+
+    def validators
+      ValidatorChain.new
     end
   end
 end

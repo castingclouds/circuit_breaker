@@ -10,7 +10,13 @@ module Examples
         end
 
         def must_be_different(field1, field2)
-          ->(doc) { doc.send(field1) != doc.send(field2) }
+          ->(doc) { 
+            val1 = doc.send(field1)
+            val2 = doc.send(field2)
+            puts "Comparing #{field1}='#{val1}' with #{field2}='#{val2}'"
+            # Both fields must be present and different
+            !val1.nil? && !val2.nil? && !val1.empty? && !val2.empty? && val1 != val2 
+          }
         end
 
         def must_be(field, value)

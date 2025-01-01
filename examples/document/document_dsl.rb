@@ -26,26 +26,44 @@ module Examples
         # Define transitions with required fields and rules
         flow(:draft >> :pending_review)
           .transition(:submit)
-          .validate(:reviewer_id)
-          .rules(:has_reviewer, :different_reviewer)
+          .policy(
+            validations: { all: [:reviewer_id] },
+            rules: { all: [:has_reviewer, :different_reviewer] }
+          )
 
         flow(:pending_review >> :reviewed)
           .transition(:review)
-          .validate(:reviewer_comments)
-          .rules(:has_comments)
-          .rules_any(:high_priority, :urgent)
+          .policy(
+            validations: { all: [:reviewer_comments] },
+            rules: {
+              all: [:has_comments],
+              any: [:high_priority, :urgent]
+            }
+          )
 
         flow(:reviewed >> :approved)
           .transition(:approve)
-          .validate(:approver_id, :reviewer_comments)
-          .validate_any(:external_url, :word_count)
-          .rules(:has_approver, :different_approver_from_reviewer)
-          .rules_any(:different_approver_from_author, :is_admin)
+          .policy(
+            validations: {
+              all: [:approver_id, :reviewer_comments],
+              any: [:external_url, :word_count]
+            },
+            rules: {
+              all: [
+                :has_approver,
+                :different_approver_from_reviewer,
+                :different_approver_from_author
+              ],
+              any: [:is_admin]
+            }
+          )
 
         flow(:reviewed >> :rejected)
           .transition(:reject)
-          .validate(:rejection_reason)
-          .rules(:has_rejection)
+          .policy(
+            validations: { all: [:rejection_reason] },
+            rules: { all: [:has_rejection] }
+          )
 
         # Simple transition without requirements
         flow(:rejected >> :draft).transition(:revise)
@@ -61,11 +79,12 @@ module Examples
       token = Examples::DocumentToken.new(
         id: SecureRandom.uuid,
         title: "Project Proposal",
-        content: "This is a detailed project proposal that meets the minimum length requirement.",
+        content: "This is a detailed project proposal that meets the minimum length requirement. " * 10,  # Make it longer
         priority: "high",
-        author_id: "alice123",
+        author_id: "charlie789",
         created_at: Time.now,
-        updated_at: Time.now
+        updated_at: Time.now,
+        word_count: 150  # Add word count
       )
 
       # Add token to workflow
@@ -77,7 +96,7 @@ module Examples
       begin
         # Step 1: Submit document
         puts "Step 1: Submitting document..."
-        token.reviewer_id = "bob456"  # Set reviewer_id before submitting
+        token.reviewer_id = "bob456"  # Set a different reviewer_id
         workflow.fire_transition(:submit, token)
         puts "Document submitted successfully"
         puts "Current state: #{token.state}"
@@ -93,27 +112,21 @@ module Examples
 
         # Step 3: Approve document
         puts "Step 3: Approving document..."
-        token.approver_id = "carol789"
+        token.approver_id = "admin_eve789"  # Set an admin approver who is different from both reviewer and author
         workflow.fire_transition(:approve, token)
         puts "Document approved"
         puts "Current state: #{token.state}"
         puts "Approver: #{token.approver_id}\n\n"
 
-        # Calculate and display processing time
-        puts "Total processing time: #{Time.now - token.created_at} seconds\n\n"
-
-      rescue CircuitBreaker::RulesEngine::RuleValidationError => e
-        puts "Rule validation error: #{e.message}"
-        puts "Current state: #{token.state}\n\n"
       rescue StandardError => e
         puts "Unexpected error: #{e.message}"
-        puts "Current state: #{token.state}\n\n"
+        puts "Current state: #{token.state}"
       end
 
-      puts "Document History:"
+      puts "\nDocument History:"
       puts "----------------"
       token.history.each do |event|
-        puts "#{event.timestamp} - #{event.type}"
+        puts "#{event.timestamp}: #{event.type} - #{event.details}"
       end
     end
   end

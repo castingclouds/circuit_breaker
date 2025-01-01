@@ -17,6 +17,25 @@ module Examples
       @state = :draft
       @history = []
 
+      # Initialize all attributes to nil first
+      @title = nil
+      @content = nil
+      @author_id = nil
+      @reviewer_id = nil
+      @approver_id = nil
+      @reviewer_comments = nil
+      @rejection_reason = nil
+      @tags = nil
+      @priority = nil
+      @due_date = nil
+      @word_count = nil
+      @external_url = nil
+      @submitted_at = nil
+      @reviewed_at = nil
+      @approved_at = nil
+      @rejected_at = nil
+      @completed_at = nil
+
       # Required fields for initialization
       required_fields = [:title, :content, :author_id, :priority]
       missing_fields = required_fields.select { |field| attributes[field].nil? }
@@ -26,11 +45,11 @@ module Examples
       end
 
       # Validate priority
-      unless ['low', 'medium', 'high'].include?(attributes[:priority])
-        raise ValidationError, "Invalid priority: must be one of low, medium, high"
+      unless ['low', 'medium', 'high', 'urgent'].include?(attributes[:priority])
+        raise ValidationError, "Invalid priority: must be one of low, medium, high, urgent"
       end
 
-      # Initialize attributes after validation
+      # Set provided attributes
       attributes.each do |key, value|
         instance_variable_set("@#{key}", value) if instance_variable_defined?("@#{key}")
       end

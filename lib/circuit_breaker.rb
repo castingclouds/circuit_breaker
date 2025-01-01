@@ -260,8 +260,13 @@ module CircuitBreaker
       # Validate transition rules
       if transition[:rules]
         transition[:rules].each do |rule|
-          unless @rules.evaluate(rule, token)
-            raise Token::TransitionError, "Rule '#{rule}' failed for transition #{transition_name}"
+          begin
+            result = rule.is_a?(Proc) ? rule.call(token) : @rules.evaluate(rule, token)
+            unless result
+              raise Token::TransitionError, "Rule '#{rule}' failed for transition #{transition_name}"
+            end
+          rescue StandardError => e
+            raise Token::TransitionError, "Rule evaluation failed: #{e.message}"
           end
         end
       end
