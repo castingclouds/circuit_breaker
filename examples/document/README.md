@@ -13,7 +13,7 @@ The document workflow system implements a document review and approval process w
 
 ## Example Files
 
-### `document_dsl.rb`
+### `document_workflow.rb`
 Demonstrates the declarative workflow DSL that defines:
 - State transitions with policy-based rules and validations
 - Pretty printing of workflow definitions
