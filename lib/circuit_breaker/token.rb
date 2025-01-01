@@ -65,6 +65,120 @@ module CircuitBreaker
         transition_rules[[from, to]] = block
       end
 
+      # Enhanced DSL methods
+      def states(*state_list)
+        state_list.each do |state|
+          state_transitions[state] ||= []
+        end
+        
+        # Define predicate methods for states
+        state_list.each do |state|
+          define_method("#{state}?") do
+            @state == state
+          end
+        end
+
+        const_set(:VALID_STATES, state_list.freeze)
+      end
+
+      def validate_attribute(name, &block)
+        attribute_validations[name] = block
+      end
+
+      def attribute(name, type = nil, **options)
+        # Add to list of attributes
+        attributes << name
+
+        # Define the attribute accessor
+        attr_accessor name
+
+        # Define the validator if type is specified
+        if type
+          validate_attribute name do |value|
+            next true if value.nil?
+            next false unless value.is_a?(type)
+            
+            if options[:allowed]
+              options[:allowed].include?(value)
+            else
+              true
+            end
+          end
+        end
+      end
+
+      def attributes
+        @attributes ||= []
+      end
+
+      def track_timestamp(*fields, on_state: nil, on_states: nil)
+        states = on_states || [on_state]
+        states.compact.each do |state|
+          state_timestamps[state] ||= []
+          state_timestamps[state].concat(fields)
+        end
+        attr_accessor(*fields)
+      end
+
+      def state_timestamps
+        @state_timestamps ||= {}
+      end
+
+      def state_messages
+        @state_messages ||= {}
+      end
+
+      # Default state message if none specified
+      def default_state_message
+        @default_state_message ||= ->(token, from, to) { "State changed from #{from} to #{to}" }
+      end
+
+      def default_state_message=(block)
+        @default_state_message = block
+      end
+
+      def state_message(for_state:, &block)
+        state_messages[for_state] = block
+      end
+
+      # Combined state configuration
+      def state_config(state, timestamps: nil, message: nil, &block)
+        # Handle timestamps
+        if timestamps
+          track_timestamp(*Array(timestamps), on_state: state)
+        end
+
+        # Handle message
+        if block_given?
+          state_message(for_state: state, &block)
+        elsif message
+          state_message(for_state: state) { |token| message }
+        end
+      end
+
+      # Multiple state configuration
+      def state_configs(&block)
+        config_dsl = StateConfigDSL.new(self)
+        config_dsl.instance_eval(&block)
+      end
+
+      # DSL for state configuration
+      class StateConfigDSL
+        def initialize(token_class)
+          @token_class = token_class
+        end
+
+        def state(name, timestamps: nil, message: nil, &block)
+          @token_class.state_config(name, timestamps: timestamps, message: message, &block)
+        end
+
+        def on_states(states, timestamps:)
+          Array(timestamps).each do |timestamp|
+            @token_class.track_timestamp(timestamp, on_states: states)
+          end
+        end
+      end
+
       # Visualization methods
       def visualize(format = :mermaid)
         case format
@@ -84,23 +198,48 @@ module CircuitBreaker
       end
     end
 
-    def initialize(state: nil, metadata: {})
+    def initialize(attributes = {})
       @id = SecureRandom.uuid
-      @state = state || :draft
+      @state = self.class::VALID_STATES.first
+      
+      # Initialize all attributes to nil
+      self.class.attributes.each do |attr|
+        instance_variable_set("@#{attr}", nil)
+      end
+
+      # Set provided attributes
+      attributes.each do |key, value|
+        send("#{key}=", value) if respond_to?("#{key}=")
+      end
+
+      # Add default transition hook for timestamps and history
+      self.class.before_transition do |from, to|
+        # Set timestamps for the target state
+        if (timestamp_fields = self.class.state_timestamps[to.to_sym])
+          timestamp_fields.each do |field|
+            send("#{field}=", Time.now)
+          end
+        end
+
+        # Record the transition in history with details
+        record_event(
+          :state_transition,
+          {
+            from: from,
+            to: to,
+            timestamp: Time.now,
+            details: state_change_details(from, to)
+          }
+        )
+      end
+
       @created_at = Time.now
       @updated_at = @created_at
       @event_handlers = Hash.new { |h, k| h[k] = [] }
       @async_handlers = Hash.new { |h, k| h[k] = [] }
+      @observers = Hash.new { |h, k| h[k] = [] }
+      @async_observers = Hash.new { |h, k| h[k] = [] }
       @history = []
-      
-      # Initialize instance variables from metadata
-      metadata.each do |key, value|
-        instance_variable_set("@#{key}", value)
-        self.class.send(:attr_accessor, key) unless respond_to?(key)
-      end
-
-      # Run initial validations
-      validate_current_state if @state
     end
 
     def update_state(new_state, actor_id: nil)
@@ -137,6 +276,8 @@ module CircuitBreaker
         trigger(:state_changed, old_state: old_state, new_state: new_state)
         trigger_async(:state_changed, old_state: old_state, new_state: new_state)
         
+        notify(:state_changed, old_state: old_state, new_state: new_state)
+        
         true
       rescue StandardError => e
         # Record the failed transition
@@ -148,6 +289,7 @@ module CircuitBreaker
 
         trigger(:transition_failed, error: e, from: old_state, to: new_state)
         trigger_async(:transition_failed, error: e, from: old_state, to: new_state)
+        notify(:transition_failed, error: e, from: old_state, to: new_state)
         raise
       end
     end
@@ -189,12 +331,30 @@ module CircuitBreaker
       end
     end
 
+    def on(event, async: false, &block)
+      if async
+        @async_observers[event] << block
+      else
+        @observers[event] << block
+      end
+    end
+
+    def notify(event, data = {})
+      @observers[event].each { |observer| observer.call(data) }
+      
+      @async_observers[event].each do |observer|
+        Thread.new do
+          observer.call(data)
+        end
+      end
+    end
+
     # Serialization methods
     def to_h(include_private = false)
       if include_private
         # Get all instance variables including private state
         instance_variables.each_with_object({}) do |var, hash|
-          next if [:@event_handlers, :@async_handlers].include?(var)
+          next if [:@event_handlers, :@async_handlers, :@observers, :@async_observers].include?(var)
           key = var.to_s.delete_prefix('@').to_sym
           hash[key] = instance_variable_get(var)
         end
@@ -263,57 +423,6 @@ module CircuitBreaker
 
     protected
 
-    # Helper method to define attributes with validation
-    def self.define_attribute(name, options = {})
-      attr_reader name
-
-      # Convert simple validations to ValidationResult objects
-      if validator = options[:validates]
-        if validator.is_a?(Array)
-          # Composite validation using AND
-          validator = Validators::CompositeValidator.all(*validator)
-        end
-      end
-
-      # Store validations for later use
-      attribute_validations[name] = validator if validator
-
-      # Define setter with validation
-      define_method("#{name}=") do |value|
-        old_value = instance_variable_get("@#{name}")
-        
-        # Run validation if provided
-        if validator = self.class.attribute_validations[name]
-          result = validator.call(value)
-          raise ValidationError, "Invalid value for #{name}: #{result}" unless result.valid?
-        end
-
-        instance_variable_set("@#{name}", value)
-        @updated_at = Time.now
-        
-        # Record the change in history
-        record_event(:attribute_changed, {
-          attribute: name,
-          old_value: old_value,
-          new_value: value
-        })
-        
-        # Trigger attribute change events
-        trigger(:attribute_changed, 
-                attribute: name, 
-                old_value: old_value, 
-                new_value: value)
-        trigger_async(:attribute_changed,
-                     attribute: name,
-                     old_value: old_value,
-                     new_value: value)
-        
-        value
-      end
-    end
-
-    private
-
     def validate_current_state(state = @state)
       return unless state
       if validator = self.class.state_validations[state]
@@ -330,16 +439,38 @@ module CircuitBreaker
     end
 
     def method_missing(method_name, *args)
-      var_name = "@#{method_name}"
-      if instance_variable_defined?(var_name)
-        instance_variable_get(var_name)
+      # Check if it's a setter method (ends with =)
+      if method_name.to_s.end_with?('=')
+        attr_name = method_name.to_s.chomp('=')
+        if self.class.attributes.include?(attr_name.to_sym)
+          self.class.send(:attr_accessor, attr_name.to_sym)
+          send(method_name, *args)
+        else
+          super
+        end
       else
         super
       end
     end
 
     def respond_to_missing?(method_name, include_private = false)
-      instance_variable_defined?("@#{method_name}") || super
+      # Check if it's a setter method (ends with =)
+      if method_name.to_s.end_with?('=')
+        attr_name = method_name.to_s.chomp('=')
+        self.class.attributes.include?(attr_name.to_sym)
+      else
+        super
+      end
+    end
+
+    private
+
+    def state_change_details(from, to)
+      if (message_block = self.class.state_messages[to.to_sym])
+        message_block.call(self)
+      else
+        self.class.default_state_message.call(self, from, to)
+      end
     end
   end
 end

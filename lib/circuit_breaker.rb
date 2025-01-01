@@ -3,6 +3,9 @@ require 'json'
 require 'securerandom'
 require 'set'
 require_relative 'circuit_breaker/token'
+require_relative 'circuit_breaker/workflow_dsl'
+require_relative 'circuit_breaker/rules_engine'
+require_relative 'circuit_breaker/validators' 
 
 # Module for implementing a Circuit Breaker pattern using a Petri net
 module CircuitBreaker
@@ -147,87 +150,131 @@ module CircuitBreaker
       return false unless @guard.nil? || @guard.call
       @input_arcs.all?(&:enabled?) && @output_arcs.all?(&:enabled?)
     end
+
+    def can_fire?(token)
+      return true unless @guard
+      @guard.call(token)
+    end
   end
 
   # Main workflow class that manages the Petri net
   # Can be created from a configuration or built programmatically
   class Workflow
-    attr_reader :places, :transitions, :tokens
+    include Validators 
 
-    def initialize
-      @places = {}
+    attr_writer :states
+
+    def initialize(states: [], transitions: {}, before_flows: [], rules: [])
+      @states = states
       @transitions = {}
+      @validators = {}
       @tokens = Set.new
+      @rules = rules || RulesEngine::DSL.define
+
+      # Initialize transitions
+      transitions.each do |transition, data|
+        add_transition(transition, data[:from], data[:to])
+        add_required_fields(transition, data[:required_fields]) if data[:required_fields]
+        data[:rules]&.each { |rule| add_rule(transition, rule) }
+      end
+
+      # Add before flow validators
+      before_flows.each do |block|
+        add_validator(:before, block)
+      end
     end
 
     def states=(state_list)
-      state_list.each do |state|
-        @places[state] = Place.new(state)
-      end
+      @states = state_list
     end
 
-    # Add a new transition to the workflow
-    def add_transition(name:, from:, to:, requires: nil, guard: nil, validate: nil)
-      transition = Transition.new(name: name, from: from, to: to)
-      
-      # Set up guard condition that checks requirements and validation
-      transition.set_guard do |token|
-        # Check required fields
-        if requires
-          return false unless requires.all? { |field| token.respond_to?(field) && !token.send(field).nil? }
-        end
+    def add_validator(type, validator)
+      @validators[type] ||= []
+      @validators[type] << validator
+    end
 
-        # Run guard condition if present
-        return false if guard && !guard.call(token)
+    def validate_token(token)
+      return unless @validators
 
-        # Run validation if present
-        if validate
-          begin
-            validate.call(token)
-            true
-          rescue => e
-            false
+      @validators.each do |type, validators|
+        validators.each do |validator|
+          result = validator.call(token)
+          case result
+          when ValidationResult
+            unless result.valid?
+              raise Token::ValidationError, "Validation failed: #{result}"
+            end
+          when false
+            raise Token::ValidationError, "Validation failed"
           end
-        else
-          true
+        end
+      end
+    end
+
+    def add_transition(name, from, to)
+      @transitions[name] = {
+        from: from,
+        to: to
+      }
+    end
+
+    def add_required_fields(transition, fields)
+      @transitions[transition][:required_fields] = fields
+    end
+
+    def add_rule(transition, rule)
+      @transitions[transition][:rules] ||= []
+      @transitions[transition][:rules] << rule
+    end
+
+    def add_token(token)
+      token.state ||= @states.first
+      validate_token(token)
+      @tokens << token
+      token
+    end
+
+    def fire_transition(transition_name, token)
+      raise Token::TransitionError, "Token not in workflow" unless @tokens.include?(token)
+      
+      transition = @transitions[transition_name]
+      raise Token::TransitionError, "Unknown transition: #{transition_name}" unless transition
+      
+      # Validate current state
+      unless token.state == transition[:from]
+        raise Token::TransitionError, "Token in wrong state: expected #{transition[:from]}, got #{token.state}"
+      end
+      
+      validate_token(token)
+
+      # Validate required fields
+      if transition[:required_fields]
+        transition[:required_fields].each do |field|
+          value = token.send(field)
+          if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+            raise Token::ValidationError, "Required field '#{field}' is missing"
+          end
+        end
+      end
+      
+      # Validate transition rules
+      if transition[:rules]
+        transition[:rules].each do |rule|
+          begin
+            result = rule.is_a?(Proc) ? rule.call(token) : @rules.evaluate(rule, token)
+            unless result
+              raise Token::TransitionError, "Rule '#{rule}' failed for transition #{transition_name}"
+            end
+          rescue StandardError => e
+            raise Token::TransitionError, "Rule evaluation failed: #{e.message}"
+          end
         end
       end
 
-      # Connect places with transitions
-      @places[from].add_output_arc(transition)
-      @places[to].add_input_arc(transition)
-      
-      @transitions[name] = transition
-      transition
-    end
-
-    # Add a token to the workflow
-    def add_token(token)
-      @tokens.add(token)
-      @places[token.state.to_sym]&.add_token(token) if token.state
-    end
-
-    # Fire a specific transition for a token
-    def fire_transition(transition_name, token)
-      transition = @transitions[transition_name]
-      raise "Transition not found: #{transition_name}" unless transition
-      
-      # Find the source place
-      source_place = @places.values.find { |p| p.tokens.include?(token) }
-      raise "Token not found in any place" unless source_place
-      
-      # Find the target place
-      target_place = @places.values.find { |p| p.input_arcs.any? { |arc| arc.source == transition } }
-      raise "Target place not found for transition" unless target_place
-      
-      if transition.enabled?
-        source_place.remove_token
-        target_place.add_token(token)
-        token.state = target_place.name.to_s
-        true
-      else
-        raise "Unable to fire transition: #{transition_name}"
-      end
+      # Update token state
+      old_state = token.state
+      token.state = transition[:to]
+      token.notify(:state_changed, old_state: old_state, new_state: token.state)
     end
   end
 end
