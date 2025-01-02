@@ -92,6 +92,7 @@ module Examples
 
       puts "Initial Document State:"
       puts "State: #{token.state}\n\n"
+      puts token.to_json(true)
 
       begin
         # Step 1: Submit document
@@ -101,6 +102,7 @@ module Examples
         puts "Document submitted successfully"
         puts "Current state: #{token.state}"
         puts "Reviewer: #{token.reviewer_id}\n\n"
+        
 
         # Step 2: Review document
         puts "Step 2: Reviewing document..."

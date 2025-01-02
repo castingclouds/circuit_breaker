@@ -41,5 +41,13 @@ module Examples
       # Handle shared timestamp
       on_states [:approved, :rejected], timestamps: :completed_at
     end
+
+    def to_json(include_private = false)
+      JSON.pretty_generate(to_h(include_private))
+    end
+
+    def to_yaml(include_private = false)
+      to_h(include_private).to_yaml
+    end
   end
 end
