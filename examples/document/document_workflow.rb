@@ -1,7 +1,9 @@
 require_relative '../../lib/circuit_breaker'
+require_relative '../../lib/circuit_breaker/executors/assistant_executor'
 require_relative 'document_token'
 require_relative 'document_rules'
 require_relative 'document_validators'
+require_relative 'document_assistant'
 
 # Example of a document workflow using a more declarative DSL approach
 module Examples
@@ -93,6 +95,15 @@ module Examples
       puts "Initial Document State:"
       puts "State: #{token.state}\n\n"
       puts token.to_json(true)
+
+      # Initialize document assistant
+      assistant = DocumentAssistant.new('qwen2.5-coder')
+
+      # Get initial analysis
+      puts "\nInitial Document Analysis:"
+      puts "========================="
+      puts assistant.analyze_document(token)
+      puts "\n"
 
       begin
         # Step 1: Submit document

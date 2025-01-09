@@ -1,192 +1,61 @@
 # Circuit Breaker
 
-A Ruby implementation of workflow orchestration using Petri Nets, designed as an alternative approach to Argo Workflows' DAG-based system. This project explores modeling workflows through states and transitions rather than tasks, offering a more natural way to represent complex state-based processes.
+Circuit Breaker is a powerful Ruby library that provides a declarative DSL for building AI-powered workflows and assistants. It seamlessly integrates with various LLM providers and offers robust tools for document analysis, workflow management, and autonomous agents.
 
-## Motivation
+## Features
 
-Traditional workflow engines like Argo Workflows use Directed Acyclic Graphs (DAGs) to model task dependencies. While DAGs excel at representing task sequences and dependencies, they can become complex when modeling state-based systems where:
+### 1. Declarative Workflow DSL
+- State-based workflow engine
+- Policy-based transitions
+- Rule validation
+- History tracking
+- Event handling
 
-- Multiple conditions affect state transitions
-- States can have multiple active tokens (parallel executions)
-- Complex synchronization patterns are needed
-- State transitions depend on runtime conditions
+### 2. AI Integration
+- Multiple LLM providers (OpenAI, Ollama)
+- Automatic model detection
+- Tool integration framework
+- Memory management
+- Error handling with retries
 
-Petri Nets provide a formal mathematical model that naturally represents these concepts through:
-- Places (states)
-- Transitions (state changes)
-- Tokens (current state markers)
-- Arcs (flow relationships)
+### 3. Document Analysis
+- Content quality assessment
+- Sentiment and tone analysis
+- Context detection
+- Improvement suggestions
+- Structure evaluation
 
-## Core Components
+### 4. Executors
+- AssistantExecutor for AI-powered tools
+- AgentExecutor for autonomous tasks
+- Custom executor support
+- Chainable tool pipelines
 
-### 1. States and Transitions
-States represent the possible stages in your workflow, while transitions define how states can change:
+## Installation
+
+Add this line to your application's Gemfile:
+
+```ruby
+gem 'circuit_breaker'
+```
+
+And then execute:
+```bash
+$ bundle install
+```
+
+Or install it yourself as:
+```bash
+$ gem install circuit_breaker
+```
+
+## Quick Start
+
+### 1. Define a Workflow
+
 ```ruby
 workflow = CircuitBreaker::WorkflowDSL.define do
-  # Define all possible states (first one is initial state)
-  states :draft,           # Initial state when document is created
-        :pending_review,   # Document submitted and awaiting review
-        :reviewed,         # Document has been reviewed with comments
-        :approved,         # Document has been approved
-        :rejected         # Document was rejected
-
-  # Define transitions between states
-  flow(:draft >> :pending_review).transition(:submit)
-  flow(:pending_review >> :reviewed).transition(:review)
-  flow(:reviewed >> :approved).transition(:approve)
-  flow(:reviewed >> :rejected).transition(:reject)
-end
-```
-
-### 2. Tokens and Attributes
-Tokens represent objects moving through the workflow, with attributes that can be validated:
-```ruby
-class DocumentToken < CircuitBreaker::Token
-  # Define valid states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-
-  # Define attributes with types and validations
-  attribute :title,       String
-  attribute :content,     String
-  attribute :priority,    String, allowed: %w[low medium high urgent]
-  attribute :author_id,   String
-  attribute :word_count,  Integer
-end
-```
-
-### 3. State Configuration
-Configure how tokens behave in each state with timestamps and messages:
-```ruby
-class DocumentToken < CircuitBreaker::Token
-  state_configs do
-    # Configure state behavior
-    state :pending_review,
-          timestamps: :submitted_at,
-          message: ->(t) { "Document submitted by #{t.author_id}" }
-
-    state :approved,
-          timestamps: [:approved_at, :completed_at],
-          message: ->(t) { "Document approved by #{t.approver_id}" }
-  end
-end
-```
-
-### 4. Policies and Rules
-Control transitions with validation and rule policies:
-```ruby
-workflow = CircuitBreaker::WorkflowDSL.define do
-  flow(:draft >> :pending_review)
-    .transition(:submit)
-    .policy(
-      validations: { 
-        all: [:title, :content],    # Required fields
-        any: [:external_url, :word_count]  # At least one required
-      },
-      rules: { 
-        all: [:has_reviewer],       # All rules must pass
-        any: [:high_priority, :urgent]  # At least one must pass
-      }
-    )
-end
-```
-
-### 5. Workflow Execution
-Execute workflow transitions and track state:
-```ruby
-# Create and configure token
-token = DocumentToken.new(
-  title: "Project Proposal",
-  content: "Detailed project proposal...",
-  author_id: "alice123",
-  priority: "high"
-)
-
-# Add token to workflow and execute transitions
-workflow.add_token(token)
-workflow.fire_transition(:submit, token)
-
-# Check token state and history
-puts token.current_state    # => "pending_review"
-puts token.submitted_at    # => "2025-01-01 12:57:59 -0500"
-puts token.state_message   # => "Document submitted by alice123"
-```
-
-## Key Features
-
-1. **State-Based Modeling**
-   - Natural representation of system states
-   - Clear visualization of possible state transitions
-   - Support for parallel state activations
-
-2. **Thread-Safe Operations**
-   - Atomic token operations
-   - Safe concurrent execution
-   - Mutex-protected state changes
-
-3. **Rich Flow Control**
-   - Weighted arcs for complex flow patterns
-   - Guard conditions for conditional transitions
-   - Token-based parallel execution
-
-4. **Formal Semantics**
-   - Based on Petri Net mathematics
-   - Clear execution rules
-   - Analyzable properties
-
-## Understanding Petri Nets vs DAGs
-
-### Directed Acyclic Graphs (DAGs)
-In Argo Workflows, workflows are modeled as DAGs where:
-- Nodes represent **tasks** to be executed
-- Edges represent **dependencies** between tasks
-- Execution flows from start to end nodes
-- Each task runs exactly once
-- Tasks can run in parallel if their dependencies are met
-
-For example, an approval workflow in Argo might look like:
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Workflow
-spec:
-  entrypoint: approval-dag
-  templates:
-  - name: approval-dag
-    dag:
-      tasks:
-      - name: submit
-        template: submit-template
-      - name: review
-        template: review-template
-        dependencies: [submit]
-      - name: approve
-        template: approve-template
-        dependencies: [review]
-      - name: reject
-        template: reject-template
-        dependencies: [review]
-```
-
-### Petri Nets
-In **Circuit Breaker**, workflows are modeled as Petri Nets where:
-- Places represent **states** of the system
-- Transitions represent **actions** that change states
-- Tokens represent **current state markers**
-- Arcs connect places to transitions and vice versa
-- Multiple tokens can exist simultaneously
-- States can be active multiple times
-- Transitions fire when their input places have tokens and guards are satisfied
-
-The same approval workflow in Petri Nets looks quite different:
-```ruby
-workflow = CircuitBreaker::WorkflowDSL.define do
-  # Define all possible document states
-  states :draft,           # Initial state when document is created
-        :pending_review,   # Document submitted and awaiting review
-        :reviewed,         # Document has been reviewed with comments
-        :approved,         # Document has been approved
-        :rejected         # Document was rejected
-
-  # Define state transitions with policies
+  # Define states and transitions
   flow(:draft >> :pending_review)
     .transition(:submit)
     .policy(
@@ -197,473 +66,214 @@ workflow = CircuitBreaker::WorkflowDSL.define do
   flow(:pending_review >> :reviewed)
     .transition(:review)
     .policy(
-      validations: { all: [:reviewer_comments] },
       rules: { all: [:has_comments] }
     )
 
-  flow(:reviewed >> :approved)
-    .transition(:approve)
+  flow(:reviewed >> [:approved, :rejected])
+    .transitions(:approve, :reject)
     .policy(
-      validations: { all: [:approver_id] },
-      rules: { all: [:has_approver, :is_admin] }
-    )
-
-  flow(:reviewed >> :rejected)
-    .transition(:reject)
-    .policy(
-      validations: { all: [:rejection_reason] },
-      rules: { all: [:has_rejection] }
-    )
-
-  # Allow revision of rejected documents
-  flow(:rejected >> :draft).transition(:revise)
-end
-```
-
-### Key Differences
-
-1. **State vs Task Focus**
-   - DAG: Focuses on what tasks need to be done
-   - Petri Net: Focuses on what states the system can be in
-
-2. **Execution Model**
-   - DAG: Tasks execute once when dependencies are met
-   - Petri Net: States can be entered/exited multiple times as tokens flow
-
-3. **Parallelism**
-   - DAG: Tasks run in parallel if dependencies allow
-   - Petri Net: Multiple tokens can exist in different places simultaneously
-
-4. **Decision Making**
-   - DAG: Uses conditional tasks and branches
-   - Petri Net: Uses guard conditions on transitions and token flow
-
-5. **Reentrance**
-   - DAG: Tasks typically execute exactly once
-   - Petri Net: Places can receive tokens multiple times
-
-## Example Walkthrough: Document Approval
-
-Let's walk through a complete document approval workflow:
-
-### 1. Setup Workflow and Token
-```ruby
-# Define the workflow
-workflow = CircuitBreaker::WorkflowDSL.define do
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-  
-  flow(:draft >> :pending_review)
-    .transition(:submit)
-    .policy(
-      validations: { all: [:reviewer_id] },
-      rules: { all: [:has_reviewer] }
+      rules: { all: [:is_admin] }
     )
 end
-
-# Create initial document
-token = DocumentToken.new(
-  title: "Project Proposal",
-  content: "Detailed project proposal...",
-  author_id: "alice123"
-)
-
-# Add to workflow (automatically starts in :draft state)
-workflow.add_token(token)
-puts token.state  # => "draft"
 ```
 
-### 2. Submit for Review
+### 2. Create an AI Assistant
+
 ```ruby
-# Set required fields for submission
-token.reviewer_id = "bob456"
-
-# Submit document
-workflow.fire_transition(:submit, token)
-puts token.state           # => "pending_review"
-puts token.submitted_at    # => "2025-01-01 13:05:53 -0500"
-puts token.state_message   # => "Document submitted for review by bob456"
-```
-
-### 3. Review Document
-```ruby
-# Add review comments
-token.reviewer_comments = "Good proposal, needs minor revisions"
-
-# Complete review
-workflow.fire_transition(:review, token)
-puts token.state          # => "reviewed"
-puts token.reviewed_at    # => "2025-01-01 13:05:53 -0500"
-puts token.state_message  # => "Document reviewed by bob456 with comments"
-```
-
-### 4. Approval Decision
-```ruby
-# Attempt to approve
-token.approver_id = "admin_eve789"
-
-begin
-  # This will succeed if approver is admin and different from reviewer
-  workflow.fire_transition(:approve, token)
-  puts token.state          # => "approved"
-  puts token.approved_at    # => "2025-01-01 13:05:53 -0500"
-  puts token.completed_at   # => "2025-01-01 13:05:53 -0500"
-  puts token.state_message  # => "Document approved by admin_eve789"
-rescue CircuitBreaker::RulesEngine::RuleValidationError => e
-  # Handle validation failures (e.g., approver not admin)
-  puts "Approval failed: #{e.message}"
-  
-  # Reject instead
-  token.rejection_reason = "Needs major revisions"
-  workflow.fire_transition(:reject, token)
-  puts token.state          # => "rejected"
-  puts token.rejected_at    # => "2025-01-01 13:05:53 -0500"
-  puts token.completed_at   # => "2025-01-01 13:05:53 -0500"
-  puts token.state_message  # => "Document rejected with reason: Needs major revisions"
+assistant = CircuitBreaker::Executors::AssistantExecutor.define do
+  use_model 'qwen2.5-coder'
+  with_system_prompt "You are a document analysis assistant..."
+  with_parameters temperature: 0.7, top_p: 0.9
+  add_tools [
+    ContentAnalysisTool.new,
+    SentimentAnalysisTool.new,
+    ImprovementTool.new
+  ]
 end
+
+result = assistant
+  .update_context(input: "Analyze this document...")
+  .execute
 ```
 
-This walkthrough demonstrates:
-- Token state tracking with timestamps
-- State-specific validation rules
-- Automatic message generation
-- Error handling for rule violations
-- Shared timestamps across states (completed_at)
-
-## Using the Workflow DSL
-
-The Circuit Breaker provides a powerful DSL for defining workflows with policy-based transitions:
+### 3. Define Custom Tools
 
 ```ruby
-workflow = CircuitBreaker::WorkflowDSL.define do
-  # Configure workflow settings
-  for_object 'Document'
-  
-  # Define all possible states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-  
-  # Define flows with policy-based validations and rules
-  flow(:draft >> :pending_review)
-    .transition(:submit)
-    .policy(
-      validations: { 
-        all: [:title, :content, :author_id],
-        any: [:external_url, :word_count]
-      },
-      rules: { 
-        all: [:has_reviewer],
-        any: [:high_priority, :urgent]
+class CustomAnalysisTool < CircuitBreaker::Executors::LLM::Tool
+  def initialize
+    super(
+      name: 'custom_analysis',
+      description: 'Performs specialized analysis',
+      parameters: {
+        content: { type: 'string', description: 'Content to analyze' }
       }
     )
-  
-  flow(:pending_review >> :reviewed)
-    .transition(:review)
-    .policy(
-      validations: { all: [:reviewer_comments] },
-      rules: {
-        all: [:has_comments],
-        any: [:high_priority, :urgent]
-      }
-    )
-    
-  flow(:reviewed >> :approved)
-    .transition(:approve)
-    .policy(
-      validations: {
-        all: [:approver_id, :reviewer_comments],
-        any: [:external_url, :word_count]
-      },
-      rules: {
-        all: [
-          :has_approver,
-          :different_approver_from_reviewer,
-          :different_approver_from_author
-        ],
-        any: [:is_admin]
-      }
-    )
-    
-  flow(:reviewed >> :rejected)
-    .transition(:reject)
-    .policy(
-      validations: { all: [:rejection_reason] },
-      rules: { all: [:has_rejection] }
-    )
-    
-  # Simple transition without requirements
-  flow(:rejected >> :draft)
-    .transition(:revise)
-end
-```
+  end
 
-### Token Configuration
-
-Circuit Breaker provides a powerful DSL for configuring tokens with attributes, timestamps, and state messages:
-
-```ruby
-class DocumentToken < CircuitBreaker::Token
-  # Define valid states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-
-  # Define attributes with types and validations
-  attribute :title,            String
-  attribute :content,          String
-  attribute :priority,         String, allowed: %w[low medium high urgent]
-  attribute :author_id,        String
-  attribute :reviewer_id,      String
-  attribute :approver_id,      String
-  attribute :reviewer_comments, String
-  attribute :rejection_reason,  String
-  attribute :word_count,       Integer
-  attribute :external_url,     String
-
-  # Define timestamps and state messages in a single configuration block
-  state_configs do
-    # Configure pending_review state
-    state :pending_review,
-          timestamps: :submitted_at,
-          message: ->(t) { "Document submitted for review by #{t.reviewer_id}" }
-
-    # Configure reviewed state
-    state :reviewed,
-          timestamps: :reviewed_at,
-          message: ->(t) { "Document reviewed by #{t.reviewer_id} with comments" }
-
-    # Configure approved state
-    state :approved,
-          timestamps: :approved_at,
-          message: ->(t) { "Document approved by #{t.approver_id}" }
-
-    # Configure rejected state
-    state :rejected,
-          timestamps: :rejected_at,
-          message: ->(t) { "Document rejected with reason: #{t.rejection_reason}" }
-
-    # Configure timestamps shared across multiple states
-    on_states [:approved, :rejected], timestamps: :completed_at
+  def execute(content:)
+    # Your custom analysis logic
+    { result: analyze(content) }
   end
 end
 ```
 
-### Policy-Based Rules
+## Components
 
-The DSL supports complex policy-based rules and validations:
-1. **Validation Policies**
-   ```ruby
-   validations: {
-     all: [:field1, :field2],     # All fields must be present
-     any: [:field3, :field4]      # At least one field must be present
-   }
-   ```
+### 1. Workflow Engine
 
-2. **Rule Policies**
-   ```ruby
-   rules: {
-     all: [:rule1, :rule2],       # All rules must pass
-     any: [:rule3, :rule4]        # At least one rule must pass
-   }
-   ```
+The workflow engine provides:
+- State management
+- Transition validation
+- Rule enforcement
+- Event tracking
+- History management
 
-3. **Custom Rules**
-   ```ruby
-   rule :different_reviewer,
-     desc: "Reviewer must be different from author",
-     &must_be_different(:reviewer_id, :author_id)
-   
-   rule :is_admin,
-     desc: "Approver must be an admin",
-     &must_start_with(:approver_id, "admin_")
-   ```
-
-4. **Custom Validations**
-   ```ruby
-   validator :word_count,
-     desc: "Document must have minimum word count",
-     &must_have_min_words(:content, 100)
-   
-   validator :priority,
-     desc: "Priority must be valid",
-     &must_be_one_of(:priority, %w[low medium high urgent])
-   ```
-
-### Error Handling
-
-The DSL provides clear error messages for policy violations:
-
+Example:
 ```ruby
-begin
-  workflow.fire_transition(:approve, token)
-rescue CircuitBreaker::RulesEngine::RuleValidationError => e
-  puts "Rule validation failed: #{e.message}"
-  # => "Rule validation failed: Rule 'different_approver_from_author' failed"
-rescue CircuitBreaker::Validators::ValidationError => e
-  puts "Validation failed: #{e.message}"
-  # => "Validation failed: Field 'approver_id' is required"
-end
+# Define rules
+rule :has_reviewer,
+     desc: "Document must have a reviewer assigned",
+     &requires(:reviewer_id)
+
+# Define validations
+validator :title,
+         desc: "Document title is required",
+         &must_be_present(:title)
+
+# Create workflow instance
+workflow = DocumentWorkflow.new(document)
+workflow.submit  # Transition to pending_review
 ```
 
-### History Tracking
+### 2. AI Executors
 
-The workflow tracks the complete history of transitions:
+Two main executor types:
 
+1. AssistantExecutor
+   - Tool-based execution
+   - Context management
+   - Memory persistence
+   - Error handling
+
+2. AgentExecutor
+   - Autonomous task execution
+   - Tool discovery
+   - Planning capabilities
+   - Progress tracking
+
+### 3. Tool Framework
+
+Tools can be:
+- Basic tools with direct execution
+- Chainable tools for complex pipelines
+- Stateful tools with context
+- Fallback-enabled tools
+
+Example chainable tool:
 ```ruby
-token.history.each do |event|
-  puts "#{event.timestamp}: #{event.type} - #{event.details}"
-end
-```
+class ChainableTool < CircuitBreaker::Executors::LLM::ChainableTool
+  def initialize
+    super(
+      name: 'chainable_tool',
+      description: 'Part of processing pipeline',
+      input_schema: { type: 'string' },
+      output_schema: { type: 'object' }
+    )
+  end
 
-### Debug Output
-
-The workflow can provide detailed debug output for troubleshooting:
-
-```ruby
-workflow.debug_mode = true
-workflow.fire_transition(:approve, token)
-# => Rule 'has_approver' evaluated to true
-# => Comparing approver_id='admin_eve789' with reviewer_id='bob456'
-# => Rule 'different_approver_from_reviewer' evaluated to true
-```
-
-## Advanced Patterns
-
-The workflow DSL excels at modeling complex patterns:
-
-1. **Reentrant Workflows**
-```ruby
-workflow = CircuitBreaker::WorkflowDSL.define do
-  states :draft, :pending_review, :reviewed, :rejected
-  
-  # Allow documents to be resubmitted after rejection
-  flow(:draft >> :pending_review).transition(:submit)
-  flow(:rejected >> :draft).transition(:revise)
-  flow(:pending_review >> :reviewed).transition(:review)
-  flow(:reviewed >> :rejected).transition(:reject)
-end
-```
-
-2. **Parallel Reviews**
-```ruby
-class MultiReviewToken < CircuitBreaker::Token
-  # Track multiple reviewers
-  attribute :reviewers, Array
-  attribute :reviews_completed, Integer, default: 0
-  
-  state_configs do
-    state :pending_review,
-          timestamps: :review_started_at,
-          message: ->(t) { "Awaiting #{t.reviewers.count} reviews" }
-          
-    state :reviewed,
-          timestamps: :all_reviews_completed_at,
-          message: ->(t) { "All #{t.reviews_completed} reviews completed" }
+  def execute(input, context)
+    result = process(input)
+    next_tool = context.available_tools.find { |t| t.can_handle?(result) }
+    context.chain(next_tool) if next_tool
   end
 end
-
-workflow = CircuitBreaker::WorkflowDSL.define do
-  flow(:pending_review >> :reviewed)
-    .transition(:complete_review)
-    .policy(
-      validations: { all: [:reviewer_comments] },
-      rules: { 
-        all: [:has_comments],
-        custom: ->(token) { token.reviews_completed >= 3 }  # Need 3 reviews
-      }
-    )
-end
 ```
 
-3. **Synchronization Points**
+## Examples
+
+See the `examples` directory for complete examples:
+
+1. Document Workflow
+   - Complete document management system
+   - AI-powered analysis
+   - Review process automation
+   - State tracking
+
+2. Research Assistant
+   - Autonomous research agent
+   - Source gathering
+   - Summary generation
+   - Citation management
+
+## Configuration
+
+### 1. LLM Providers
+
 ```ruby
-class TeamApprovalToken < CircuitBreaker::Token
-  attribute :team_approvals, Array
-  attribute :required_approvals, Integer, default: 3
-  
-  state_configs do
-    state :pending_approval,
-          timestamps: :first_approval_at,
-          message: ->(t) { "#{t.team_approvals.count}/#{t.required_approvals} approvals received" }
-          
-    state :approved,
-          timestamps: :fully_approved_at,
-          message: ->(t) { "Received all #{t.required_approvals} required approvals" }
-  end
+# Configure Ollama
+CircuitBreaker.configure do |config|
+  config.ollama_base_url = 'http://localhost:11434'
+  config.default_model = 'qwen2.5-coder'
 end
 
-workflow = CircuitBreaker::WorkflowDSL.define do
-  flow(:pending_approval >> :approved)
-    .transition(:approve)
-    .policy(
-      rules: {
-        custom: ->(token) { token.team_approvals.count >= token.required_approvals }
-      }
-    )
+# Configure OpenAI
+CircuitBreaker.configure do |config|
+  config.openai_api_key = ENV['OPENAI_API_KEY']
+  config.default_model = 'gpt-4'
 end
 ```
 
-4. **State-Based Conditions**
+### 2. Memory Settings
+
 ```ruby
-workflow = CircuitBreaker::WorkflowDSL.define do
-  flow(:reviewed >> :approved)
-    .transition(:approve)
-    .policy(
-      validations: { all: [:approver_id] },
-      rules: {
-        all: [:has_approver, :is_admin],
-        custom: ->(token) {
-          # Complex state-based rules
-          token.priority == "high" ||
-          (token.reviews_completed >= 2 && token.all_reviews_positive?)
-        }
-      }
-    )
+CircuitBreaker.configure do |config|
+  config.max_memory_tokens = 4000
+  config.memory_window_size = 10
 end
 ```
 
-These patterns demonstrate how the workflow DSL can elegantly handle complex state-based workflows through its policy-based rules and token attributes.
+### 3. Tool Settings
 
-## Differences from Argo Workflows
-
-1. **State-Centric vs Task-Centric**
-   - Argo: Models workflows as task dependencies
-   - Petri Workflows: Models workflows as state transitions
-
-2. **Execution Model**
-   - Argo: Sequential task execution based on DAG
-   - Petri Workflows: Concurrent state transitions based on token availability
-
-3. **Flow Control**
-   - Argo: Task-level conditions and dependencies
-   - Petri Workflows: State-based transitions with guard conditions
-
-4. **Parallelism**
-   - Argo: Parallel task execution
-   - Petri Workflows: Multiple active states with token-based synchronization
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/castingclouds/circuit_breaker.git
+```ruby
+CircuitBreaker.configure do |config|
+  config.default_tools = [
+    ContentAnalysisTool,
+    SentimentAnalysisTool,
+    ImprovementTool
+  ]
+  config.tool_timeout = 30  # seconds
+end
 ```
 
-2. Install dependencies:
-```bash
-bundle install
-```
+## Best Practices
 
-## Running the Examples
+1. Workflow Design
+   - Keep states and transitions clear
+   - Use descriptive rule names
+   - Implement proper validation
+   - Track state changes
 
-```bash
-ruby examples/document/document_workflow.rb
-```
+2. AI Integration
+   - Choose appropriate models
+   - Handle errors gracefully
+   - Implement retries
+   - Monitor performance
+
+3. Tool Development
+   - Keep tools focused
+   - Provide clear descriptions
+   - Include fallback behavior
+   - Handle errors appropriately
 
 ## Contributing
 
 1. Fork the repository
 2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+3. Add tests for new features
+4. Submit a pull request
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
