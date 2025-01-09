@@ -11,6 +11,39 @@ The document workflow system implements a document review and approval process w
 - `approved`: Document approved by manager
 - `rejected`: Document rejected with reasons
 
+## Requirements
+
+1. Ruby 2.7 or higher
+2. Ollama installed and running locally (for AI-powered document analysis)
+   - Install from [Ollama's website](https://ollama.ai)
+   - Pull the CodeLlama model: `ollama pull codellama`
+   - Start the Ollama server: `ollama serve`
+
+## Setup
+
+1. Install dependencies:
+```bash
+bundle install
+```
+
+2. Ensure Ollama is running:
+```bash
+# Check if Ollama is running and models are available
+ollama list
+```
+
+3. Run the example:
+```bash
+ruby document_workflow.rb
+```
+
+The example will:
+1. Show the workflow definition
+2. Create a sample document
+3. Perform AI analysis using Ollama
+4. Execute the workflow steps with validation
+5. Display the final document state
+
 ## Example Files
 
 ### `document_workflow.rb`
@@ -18,32 +51,50 @@ Demonstrates the declarative workflow DSL that defines:
 - State transitions with policy-based rules and validations
 - Pretty printing of workflow definitions
 - Complete workflow execution
+- AI-powered document analysis using Ollama integration
 
-Example of policy-based workflow definition:
+The workflow now includes an AI assistant that analyzes documents and provides feedback:
+
 ```ruby
-flow(:draft >> :pending_review)
-  .transition(:submit)
-  .policy(
-    validations: { all: [:reviewer_id] },
-    rules: { all: [:has_reviewer, :different_reviewer] }
-  )
+# Initialize document assistant with Ollama
+assistant = DocumentAssistant.new('codellama')
 
-flow(:reviewed >> :approved)
-  .transition(:approve)
-  .policy(
-    validations: {
-      all: [:approver_id, :reviewer_comments],
-      any: [:external_url, :word_count]
-    },
-    rules: {
-      all: [
-        :has_approver,
-        :different_approver_from_reviewer,
-        :different_approver_from_author
-      ],
-      any: [:is_admin]
-    }
-  )
+# Get AI analysis of the document
+analysis = assistant.analyze_document(token)
+```
+
+The DocumentAssistant provides two powerful tools:
+
+1. **AnalyzeContentTool**: Analyzes document content for:
+   - Word count requirements
+   - Document structure
+   - Writing clarity
+   - Content completeness
+
+2. **SuggestImprovementsTool**: Provides specific improvement suggestions for:
+   - Document structure (sections, headings, transitions)
+   - Writing clarity (sentence length, active voice)
+   - Content completeness (required sections)
+
+Example of AI-powered document analysis:
+```ruby
+# Create a document assistant using Ollama
+assistant = DocumentAssistant.new(
+  model: 'codellama',  # or other Ollama models
+  ollama_base_url: 'http://localhost:11434'  # optional
+)
+
+# Get AI analysis before submitting
+analysis = assistant.analyze_document(document)
+puts analysis
+# Output:
+# Word Count Analysis: 150 words (minimum: 100)
+# Length Status: Meets minimum requirement
+#
+# Content Analysis:
+# - Structure: 1 paragraph detected. Consider adding more structure.
+# - Clarity: Found 2 complex sentences. Consider simplifying for better clarity.
+# - Completeness: 1/3 key sections identified.
 ```
 
 ### `document_rules.rb`
@@ -91,7 +142,7 @@ Defines the document data structure and attributes that are validated and tracke
 
 Run the complete workflow example:
 ```bash
-ruby document_dsl.rb
+ruby document_workflow.rb
 ```
 
 This will show:
@@ -99,10 +150,71 @@ This will show:
    - All states and their transitions
    - Required rules with descriptions
    - Required validations with descriptions
-2. A complete workflow execution demonstrating:
-   - Document submission with reviewer
-   - Review process with comments
-   - Final approval with approver
+2. AI-powered document analysis with:
+   - Content structure evaluation
+   - Writing clarity assessment
+   - Completeness check
+   - Specific improvement suggestions
+
+## Customizing the AI Assistant
+
+The DocumentAssistant can be customized in several ways:
+
+1. **Change the LLM Model**:
+```ruby
+# Use different Ollama models
+assistant = DocumentAssistant.new('mistral')  # Use Mistral
+assistant = DocumentAssistant.new('llama2')   # Use Llama 2
+```
+
+2. **Custom Analysis Tools**:
+```ruby
+class CustomAnalysisTool < CircuitBreaker::Executors::LLM::Tool
+  def initialize
+    super(
+      name: 'custom_analysis',
+      description: 'Your custom analysis logic',
+      parameters: {
+        content: { type: 'string', description: 'Content to analyze' }
+      }
+    )
+  end
+
+  def execute(content:)
+    # Your custom analysis logic here
+  end
+end
+
+# Use custom tools
+assistant = DocumentAssistant.new(
+  model: 'codellama',
+  tools: [CustomAnalysisTool.new]
+)
+```
+
+3. **Configure Ollama Settings**:
+```ruby
+assistant = DocumentAssistant.new(
+  model: 'codellama',
+  ollama_base_url: 'http://custom-ollama-server:11434',
+  system_prompt: "Custom system prompt for specialized analysis"
+)
+```
+
+4. **Extend Analysis Capabilities**:
+- Add new analysis methods to AnalyzeContentTool
+- Create specialized tools for different document types
+- Implement custom improvement suggestions
+
+Example of adding a new analysis capability:
+```ruby
+class AnalyzeContentTool
+  def analyze_technical_depth(content)
+    technical_terms = content.scan(/\b(algorithm|implementation|architecture)\b/i)
+    "Technical depth: #{technical_terms.size} technical terms found"
+  end
+end
+```
 
 ## Key Features
 
