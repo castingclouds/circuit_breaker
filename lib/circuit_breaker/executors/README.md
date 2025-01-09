@@ -381,3 +381,284 @@ The workflow ensures that:
 4. Return structured results that can be used by other executors
 5. Handle errors gracefully and provide meaningful error messages
 6. Document any special requirements or dependencies
+
+## Assistant Executor
+
+A DSL-driven executor for building AI assistants with tool integration and context management.
+
+```ruby
+assistant = CircuitBreaker::Executors::AssistantExecutor.define do
+  use_model 'qwen2.5-coder'
+  with_system_prompt "You are a specialized assistant..."
+  with_parameters temperature: 0.7, top_p: 0.9
+  add_tools [AnalysisTool.new, SentimentTool.new]
+end
+
+result = assistant
+  .update_context(input: "Analyze this document...")
+  .execute
+```
+
+Features:
+- Fluent DSL interface
+- Automatic model provider detection
+- Tool integration and management
+- Context persistence
+- Error handling with retries
+- Parameter validation
+
+Configuration Options:
+```ruby
+executor_config do
+  parameter :model, type: :string, default: 'gpt-4'
+  parameter :model_provider, type: :string
+  parameter :ollama_base_url, type: :string, default: 'http://localhost:11434'
+  parameter :system_prompt, type: :string
+  parameter :tools, type: :array, default: []
+  parameter :parameters, type: :hash, default: {}
+  parameter :input, type: :string
+
+  validate do |context|
+    # Automatic model provider detection
+    if context[:model_provider].nil?
+      context[:model_provider] = if context[:model].to_s.start_with?('llama', 'codellama', 'mistral')
+        'ollama'
+      else
+        'openai'
+      end
+    end
+  end
+
+  before_execute do |context|
+    # Initialize memory and tools
+    @memory.system_prompt = context[:system_prompt] if context[:system_prompt]
+    add_tools(context[:tools]) if context[:tools]
+  end
+end
+```
+
+### Tool Integration
+
+#### Creating Custom Tools
+
+1. Basic Tool:
+```ruby
+class CustomTool < CircuitBreaker::Executors::LLM::Tool
+  def initialize
+    super(
+      name: 'custom_tool',
+      description: 'Performs custom analysis',
+      parameters: {
+        input: { type: 'string', description: 'Input to analyze' }
+      }
+    )
+  end
+
+  def execute(input:)
+    # Tool implementation
+    { result: analyze(input) }
+  end
+end
+```
+
+2. Chainable Tool:
+```ruby
+class ChainableTool < CircuitBreaker::Executors::LLM::ChainableTool
+  def initialize
+    super(
+      name: 'chainable_tool',
+      description: 'Can be chained with other tools',
+      input_schema: { type: 'string' },
+      output_schema: { type: 'object' }
+    )
+  end
+
+  def execute(input, context)
+    # Implementation with access to execution context
+    next_tool = context.available_tools.find { |t| t.can_handle?(result) }
+    context.chain(next_tool) if next_tool
+  end
+end
+```
+
+#### Tool Management
+
+```ruby
+# Add individual tools
+assistant.add_tool(CustomTool.new)
+
+# Add multiple tools
+assistant.add_tools([
+  AnalysisTool.new,
+  SentimentTool.new,
+  CustomTool.new
+])
+
+# Remove tool
+assistant.remove_tool('custom_tool')
+
+# Clear all tools
+assistant.clear_tools
+```
+
+## Agent Executor
+
+A powerful executor for autonomous agents that can plan and execute multi-step tasks.
+
+```ruby
+agent = CircuitBreaker::Executors::AgentExecutor.define do
+  use_model 'gpt-4'
+  with_system_prompt "You are a task planning agent..."
+  with_tools AgentTools.default_toolset
+  with_memory_size 10
+end
+
+result = agent
+  .update_context(task: "Research and summarize...")
+  .execute
+```
+
+Features:
+- Task planning and execution
+- Tool discovery and selection
+- Memory management
+- Error recovery
+- Progress tracking
+
+## Error Handling
+
+The executors include comprehensive error handling:
+
+1. Connection Errors:
+```ruby
+def make_ollama_request(context, retries = 3)
+  # ... request setup ...
+  begin
+    response = http.request(request)
+    # ... process response ...
+  rescue => e
+    if retries > 0
+      sleep(2)
+      make_ollama_request(context, retries - 1)
+    else
+      handle_error(e)
+    end
+  end
+end
+```
+
+2. Validation Errors:
+```ruby
+validate do |context|
+  raise "Missing required parameter: model" if context[:model].nil?
+  raise "Invalid temperature value" unless valid_temperature?(context[:parameters][:temperature])
+end
+```
+
+3. Tool Execution Errors:
+```ruby
+def execute_tool(tool, params)
+  tool.execute(**params)
+rescue => e
+  {
+    error: "Tool execution failed: #{e.message}",
+    fallback: tool.fallback_response
+  }
+end
+```
+
+## Memory Management
+
+Both executors support conversation memory management:
+
+```ruby
+# Initialize memory
+@memory = LLM::ConversationMemory.new(
+  system_prompt: "Initial prompt...",
+  max_tokens: 4000
+)
+
+# Update memory
+@memory.add_message(role: :user, content: "New message")
+@memory.add_message(role: :assistant, content: "Response")
+
+# Clear memory
+@memory.clear
+
+# Get conversation history
+history = @memory.messages
+```
+
+## Best Practices
+
+1. Model Selection:
+   - Use appropriate models for tasks
+   - Consider token limits
+   - Balance performance and cost
+
+2. Tool Design:
+   - Keep tools focused and simple
+   - Provide clear descriptions
+   - Include fallback responses
+   - Handle errors gracefully
+
+3. Memory Management:
+   - Set appropriate memory limits
+   - Clear memory when needed
+   - Monitor token usage
+
+4. Error Handling:
+   - Implement retries for transient errors
+   - Provide helpful error messages
+   - Include fallback behaviors
+
+## Configuration Examples
+
+### 1. Document Analysis Assistant
+
+```ruby
+assistant = AssistantExecutor.define do
+  use_model 'qwen2.5-coder'
+  with_system_prompt <<~PROMPT
+    You are a document analysis assistant...
+  PROMPT
+  with_parameters(
+    temperature: 0.7,
+    top_p: 0.9,
+    top_k: 40
+  )
+  add_tools [
+    ContentAnalysisTool.new,
+    SentimentAnalysisTool.new,
+    ImprovementTool.new
+  ]
+end
+```
+
+### 2. Research Agent
+
+```ruby
+agent = AgentExecutor.define do
+  use_model 'gpt-4'
+  with_system_prompt <<~PROMPT
+    You are a research agent...
+  PROMPT
+  with_tools [
+    SearchTool.new,
+    SummarizeTool.new,
+    CitationTool.new
+  ]
+  with_memory_size 5
+end
+```
+
+## Contributing
+
+1. Follow the DSL patterns
+2. Add comprehensive tests
+3. Document new features
+4. Handle errors appropriately
+
+## License
+
+This module is part of the Circuit Breaker library and is available under the MIT license.

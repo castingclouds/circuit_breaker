@@ -1,10 +1,19 @@
 require_relative 'base_executor'
 require_relative 'llm/memory'
 require_relative 'llm/tools'
+require_relative 'dsl'
 
 module CircuitBreaker
   module Executors
     class AssistantExecutor < BaseExecutor
+      include DSL
+
+      def initialize(context = {})
+        super
+        @memory = LLM::ConversationMemory.new(system_prompt: @context[:system_prompt])
+        @toolkit = LLM::ToolKit.new
+      end
+
       executor_config do
         parameter :model, type: :string, default: 'gpt-4', description: 'LLM model to use'
         parameter :model_provider, type: :string, description: 'Model provider (ollama/openai)'
@@ -13,40 +22,77 @@ module CircuitBreaker
         parameter :tools, type: :array, default: [], description: 'List of tools available to the assistant'
         parameter :parameters, type: :hash, default: {}, description: 'Additional parameters'
         parameter :input, type: :string, description: 'Input message for the assistant'
+
+        validate do |context|
+          if context[:model_provider].nil?
+            context[:model_provider] = if context[:model].to_s.start_with?('llama', 'codellama', 'mistral', 'dolphin', 'qwen')
+              'ollama'
+            else
+              'openai'
+            end
+          end
+        end
+
+        before_execute do |context|
+          @memory.system_prompt = context[:system_prompt] if context[:system_prompt]
+          add_tools(context[:tools]) if context[:tools]
+        end
       end
 
-      def initialize(context = {})
-        super
-        @model = context[:model] || 'gpt-4'
-        @model_provider = context[:model_provider] || detect_model_provider(@model)
-        @ollama_base_url = context[:ollama_base_url] || 'http://localhost:11434'
-        @system_prompt = context[:system_prompt]
-        @memory = LLM::ConversationMemory.new(system_prompt: @system_prompt)
-        @toolkit = setup_toolkit(context[:tools] || [])
-        @parameters = context[:parameters] || {}
+      class << self
+        def define(&block)
+          new.tap do |executor| 
+            executor.instance_eval(&block) if block_given?
+            executor.validate_parameters
+          end
+        end
+      end
+
+      def use_model(model_name)
+        @context[:model] = model_name
+        @context[:model_provider] = if model_name.to_s.start_with?('llama', 'codellama', 'mistral', 'dolphin', 'qwen')
+          'ollama'
+        else
+          'openai'
+        end
+        self
+      end
+
+      def with_system_prompt(prompt)
+        @context[:system_prompt] = prompt
+        @memory = LLM::ConversationMemory.new(system_prompt: prompt)
+        self
+      end
+
+      def with_parameters(params)
+        @context[:parameters] = (@context[:parameters] || {}).merge(params)
+        self
+      end
+
+      def add_tool(tool)
+        @toolkit.add_tool(tool)
+        self
+      end
+
+      def add_tools(tools)
+        tools.each { |tool| add_tool(tool) }
+        self
       end
 
       def update_context(new_context)
         @context.merge!(new_context)
+        validate_parameters
+        self
       end
 
       def execute
         input = @context[:input]
         return unless input
 
-        # Add user input to memory
         @memory.add_user_message(input)
-
-        # Prepare conversation context
         conversation_context = prepare_context
-
-        # Simulate LLM call (replace with actual LLM integration)
-        response = simulate_llm_call(conversation_context)
-
-        # Process response and extract any tool calls
+        response = make_llm_call(conversation_context)
         processed_response = process_response(response)
-
-        # Store assistant's response in memory
         @memory.add_assistant_message(processed_response[:content])
 
         @result = {
@@ -59,64 +105,81 @@ module CircuitBreaker
 
       private
 
-      def detect_model_provider(model)
-        return 'ollama' if model.start_with?('llama', 'codellama', 'mistral', 'dolphin')
-        'openai'
-      end
-
-      def setup_toolkit(tools)
-        toolkit = LLM::ToolKit.new
-        tools.each do |tool|
-          toolkit.add_tool(tool)
-        end
-        toolkit
-      end
-
       def prepare_context
         {
           messages: @memory.messages,
           tools: @toolkit.tool_descriptions,
-          parameters: @parameters
+          parameters: @context[:parameters]
         }
       end
 
-      def simulate_llm_call(context)
-        case @model_provider
+      def make_llm_call(context)
+        case @context[:model_provider]
         when 'ollama'
           make_ollama_request(context)
         when 'openai'
-          # Replace this with actual OpenAI API call
-          {
-            content: "This is a simulated response to: #{context[:messages].last[:content]}",
-            tool_calls: []
-          }
+          make_openai_request(context)
         end
       end
 
-      def make_ollama_request(context)
+      def make_ollama_request(context, retries = 3)
         require 'net/http'
         require 'json'
 
-        # Convert conversation history to Ollama format
         messages = format_messages_for_ollama(context[:messages])
-        tools = format_tools_for_ollama(context[:tools])
+        prompt = generate_ollama_prompt(messages, context[:tools])
 
-        uri = URI("#{@ollama_base_url}/api/generate")
+        uri = URI("#{@context[:ollama_base_url]}/api/generate")
         http = Net::HTTP.new(uri.host, uri.port)
+        http.read_timeout = 120  # Increase timeout to 120 seconds
         
         request = Net::HTTP::Post.new(uri)
         request['Content-Type'] = 'application/json'
         request.body = {
-          model: @model,
-          prompt: generate_ollama_prompt(messages, tools),
-          stream: false
+          model: @context[:model],
+          prompt: prompt,
+          stream: false,
+          options: @context[:parameters]
         }.to_json
 
-        response = http.request(request)
-        parse_ollama_response(JSON.parse(response.body))
-      rescue => e
+        begin
+          response = http.request(request)
+          
+          if response.code == '200'
+            result = JSON.parse(response.body)
+            full_response = ""
+            
+            if result.is_a?(Array)
+              result.each { |chunk| full_response += chunk['response'].to_s }
+            else
+              full_response = result['response']
+            end
+
+            {
+              content: full_response,
+              tool_calls: extract_tool_calls(full_response)
+            }
+          else
+            raise "HTTP Error: #{response.message}"
+          end
+        rescue => e
+          if retries > 0
+            puts "Retrying Ollama request (#{retries} attempts left)..."
+            sleep(2)  # Wait 2 seconds before retrying
+            make_ollama_request(context, retries - 1)
+          else
+            {
+              content: "Error: #{e.message}. Please try again later.",
+              tool_calls: []
+            }
+          end
+        end
+      end
+
+      def make_openai_request(context)
+        # Implement OpenAI API call here
         {
-          content: "Error: #{e.message}",
+          content: "OpenAI integration not implemented",
           tool_calls: []
         }
       end
@@ -130,19 +193,13 @@ module CircuitBreaker
         end
       end
 
-      def format_tools_for_ollama(tools)
-        tools.map do |tool|
-          "#{tool[:name]}: #{tool[:description]}\nParameters: #{tool[:parameters].to_json}"
-        end.join("\n\n")
-      end
-
       def generate_ollama_prompt(messages, tools)
         system_msg = messages.find { |m| m[:role] == 'system' }
         user_msgs = messages.select { |m| m[:role] != 'system' }
 
         prompt = []
         prompt << "System: #{system_msg[:content]}" if system_msg
-        prompt << "\nAvailable Tools:\n#{tools}" if tools.any?
+        prompt << "\nAvailable Tools:\n#{format_tools_for_ollama(tools)}" unless tools.empty?
         
         user_msgs.each do |msg|
           prompt << "\n#{msg[:role].capitalize}: #{msg[:content]}"
@@ -152,20 +209,14 @@ module CircuitBreaker
         prompt.join("\n")
       end
 
-      def parse_ollama_response(response)
-        return { content: "Error: #{response['error']}", tool_calls: [] } if response['error']
-
-        content = response['response']
-        tool_calls = extract_tool_calls(content)
-
-        {
-          content: clean_content(content, tool_calls),
-          tool_calls: tool_calls
-        }
+      def format_tools_for_ollama(tools)
+        return "" if tools.nil? || tools.empty?
+        tools.map do |tool|
+          "#{tool[:name]}: #{tool[:description]}\nParameters: #{tool[:parameters].to_json}"
+        end.join("\n\n")
       end
 
       def extract_tool_calls(content)
-        # Look for tool calls in the format: `@tool_name({"param": "value"})`
         tool_calls = content.scan(/@(\w+)\((.*?)\)/)
         tool_calls.map do |name, args_str|
           begin
@@ -179,19 +230,9 @@ module CircuitBreaker
         end.compact
       end
 
-      def clean_content(content, tool_calls)
-        # Remove tool call syntax from the content
-        clean = content.dup
-        tool_calls.each do |tool|
-          clean.gsub!(/@#{tool[:name]}\(#{tool[:arguments].to_json}\)/, '')
-        end
-        clean.strip
-      end
-
       def process_response(response)
         return response unless response[:tool_calls]&.any?
 
-        # Execute any tool calls
         tool_results = response[:tool_calls].map do |tool_call|
           result = @toolkit.execute_tool(tool_call[:name], **tool_call[:arguments])
           { tool: tool_call[:name], result: result }

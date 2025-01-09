@@ -1,6 +1,6 @@
 # Document Workflow Examples
 
-This directory contains examples demonstrating how to use the Circuit Breaker library to implement a document workflow system. The examples showcase a declarative DSL for defining workflows, rules, and validations.
+This directory contains examples demonstrating how to use the Circuit Breaker library to implement a document workflow system with AI-powered analysis. The examples showcase a declarative DSL for defining workflows, rules, validations, and AI-powered document analysis.
 
 ## Overview
 
@@ -11,12 +11,46 @@ The document workflow system implements a document review and approval process w
 - `approved`: Document approved by manager
 - `rejected`: Document rejected with reasons
 
+## Features
+
+### 1. AI-Powered Document Analysis
+- Content quality and structure assessment
+- Sentiment and tone analysis
+- Automatic context detection (technical, business, academic)
+- Improvement suggestions
+- Word count validation
+
+### 2. Workflow Management
+- State-based workflow engine
+- Policy-based transitions
+- Rule validation
+- History tracking
+
+### 3. Document Assistant Tools
+- Content Analysis Tool
+  - Structure evaluation
+  - Clarity assessment
+  - Completeness check
+  - Length requirements validation
+
+- Sentiment Analysis Tool
+  - Overall sentiment scoring
+  - Emotional tone analysis
+  - Formality level assessment
+  - Context-specific analysis
+  - Accessibility evaluation
+
+- Improvement Suggestions Tool
+  - Structure recommendations
+  - Clarity improvements
+  - Content completeness suggestions
+
 ## Requirements
 
 1. Ruby 2.7 or higher
 2. Ollama installed and running locally (for AI-powered document analysis)
    - Install from [Ollama's website](https://ollama.ai)
-   - Pull the CodeLlama model: `ollama pull codellama`
+   - Pull the Qwen model: `ollama pull qwen2.5-coder`
    - Start the Ollama server: `ollama serve`
 
 ## Setup
@@ -28,8 +62,7 @@ bundle install
 
 2. Ensure Ollama is running:
 ```bash
-# Check if Ollama is running and models are available
-ollama list
+curl http://localhost:11434/api/tags
 ```
 
 3. Run the example:
@@ -37,70 +70,63 @@ ollama list
 ruby document_workflow.rb
 ```
 
-The example will:
-1. Show the workflow definition
-2. Create a sample document
-3. Perform AI analysis using Ollama
-4. Execute the workflow steps with validation
-5. Display the final document state
-
 ## Example Files
 
 ### `document_workflow.rb`
-Demonstrates the declarative workflow DSL that defines:
-- State transitions with policy-based rules and validations
-- Pretty printing of workflow definitions
-- Complete workflow execution
-- AI-powered document analysis using Ollama integration
-
-The workflow now includes an AI assistant that analyzes documents and provides feedback:
+Demonstrates the workflow DSL and execution:
 
 ```ruby
-# Initialize document assistant with Ollama
-assistant = DocumentAssistant.new('codellama')
+workflow = CircuitBreaker::WorkflowDSL.define do
+  # Define states and transitions
+  flow(:draft >> :pending_review)
+    .transition(:submit)
+    .policy(
+      validations: { all: [:reviewer_id] },
+      rules: { all: [:has_reviewer, :different_reviewer] }
+    )
 
-# Get AI analysis of the document
-analysis = assistant.analyze_document(token)
-```
+  # Additional states and transitions...
+end
 
-The DocumentAssistant provides two powerful tools:
+# Initialize document assistant with AI capabilities
+assistant = DocumentAssistant.define do
+  use_model 'qwen2.5-coder'
+  with_system_prompt "Custom prompt for document analysis..."
+  with_parameters temperature: 0.7, top_p: 0.9
+end
 
-1. **AnalyzeContentTool**: Analyzes document content for:
-   - Word count requirements
-   - Document structure
-   - Writing clarity
-   - Content completeness
-
-2. **SuggestImprovementsTool**: Provides specific improvement suggestions for:
-   - Document structure (sections, headings, transitions)
-   - Writing clarity (sentence length, active voice)
-   - Content completeness (required sections)
-
-Example of AI-powered document analysis:
-```ruby
-# Create a document assistant using Ollama
-assistant = DocumentAssistant.new(
-  model: 'codellama',  # or other Ollama models
-  ollama_base_url: 'http://localhost:11434'  # optional
-)
-
-# Get AI analysis before submitting
+# Get AI analysis
 analysis = assistant.analyze_document(document)
-puts analysis
-# Output:
-# Word Count Analysis: 150 words (minimum: 100)
-# Length Status: Meets minimum requirement
-#
-# Content Analysis:
-# - Structure: 1 paragraph detected. Consider adding more structure.
-# - Clarity: Found 2 complex sentences. Consider simplifying for better clarity.
-# - Completeness: 1/3 key sections identified.
 ```
+
+### `document_assistant.rb`
+Implements the AI-powered document analysis system:
+
+```ruby
+class DocumentAssistant
+  def self.define(&block)
+    new.tap { |assistant| assistant.instance_eval(&block) }
+  end
+
+  def analyze_document(token)
+    @executor
+      .update_context(input: generate_analysis_prompt(token))
+      .execute
+  end
+end
+```
+
+Key features:
+- DSL-style configuration
+- Automatic context detection
+- Comprehensive document analysis
+- Sentiment and tone evaluation
+- Improvement suggestions
 
 ### `document_rules.rb`
-Shows our enhanced rules DSL with natural language definitions:
+Defines the rules DSL:
+
 ```ruby
-# Reviewer rules
 rule :has_reviewer,
      desc: "Document must have a reviewer assigned",
      &requires(:reviewer_id)
@@ -111,64 +137,71 @@ rule :different_reviewer,
 ```
 
 Available rule builders:
-- `requires(field)` - Ensures a field is present and not empty
-- `must_be_different(field1, field2)` - Ensures two fields have different values
-- `must_be(field, value)` - Ensures a field equals a specific value
-- `must_start_with(field, prefix)` - Ensures a field starts with a prefix
+- `requires(field)`: Ensures field presence
+- `must_be_different(field1, field2)`: Ensures different values
+- `must_be(field, value)`: Validates exact value
+- `must_start_with(field, prefix)`: Validates prefix
 
-### `document_validators.rb`
-Demonstrates our enhanced validation DSL:
+## AI Analysis Features
+
+### 1. Content Analysis
+- Structure evaluation
+  - Paragraph count and organization
+  - Section identification
+  - Heading analysis
+- Clarity assessment
+  - Sentence complexity
+  - Word choice
+  - Readability metrics
+- Completeness check
+  - Key section presence
+  - Required elements
+  - Content depth
+
+### 2. Sentiment Analysis
+- Overall sentiment scoring (0-10)
+- Emotional tone detection
+  - Confidence level
+  - Uncertainty markers
+  - Urgency indicators
+  - Caution signals
+- Formality assessment
+  - Formal vs informal language
+  - Professional tone
+  - Engagement level
+
+### 3. Context-Specific Analysis
+- Technical context
+  - Technical term usage
+  - Implementation details
+  - Architecture patterns
+- Business context
+  - ROI focus
+  - Stakeholder considerations
+  - Strategic alignment
+- Academic context
+  - Research methodology
+  - Citation patterns
+  - Academic rigor
+
+## Customization
+
+### 1. AI Model Configuration
 ```ruby
-# Basic document information
-validator :title,
-         desc: "Document title is required",
-         &must_be_present(:title)
-
-validator :priority,
-         desc: "Priority must be low, medium, high, or urgent",
-         &must_be_one_of(:priority, %w[low medium high urgent])
+assistant = DocumentAssistant.define do
+  use_model 'qwen2.5-coder'  # or other Ollama models
+  with_system_prompt "Custom analysis prompt..."
+  with_parameters(
+    temperature: 0.7,
+    top_p: 0.9,
+    top_k: 40
+  )
+end
 ```
 
-Available validator builders:
-- `must_be_present(field)` - Ensures a field is present
-- `must_be_one_of(field, values)` - Ensures a field's value is in a set
-- `must_be_url(field)` - Validates URL format
-- `must_have_min_words(field, min_count)` - Validates minimum word count
-
-### `document_token.rb`
-Defines the document data structure and attributes that are validated and tracked through the workflow.
-
-## Running the Example
-
-Run the complete workflow example:
-```bash
-ruby document_workflow.rb
-```
-
-This will show:
-1. A pretty-printed workflow definition showing:
-   - All states and their transitions
-   - Required rules with descriptions
-   - Required validations with descriptions
-2. AI-powered document analysis with:
-   - Content structure evaluation
-   - Writing clarity assessment
-   - Completeness check
-   - Specific improvement suggestions
-
-## Customizing the AI Assistant
-
-The DocumentAssistant can be customized in several ways:
-
-1. **Change the LLM Model**:
+### 2. Analysis Tools
 ```ruby
-# Use different Ollama models
-assistant = DocumentAssistant.new('mistral')  # Use Mistral
-assistant = DocumentAssistant.new('llama2')   # Use Llama 2
-```
-
-2. **Custom Analysis Tools**:
-```ruby
+# Add custom analysis tool
 class CustomAnalysisTool < CircuitBreaker::Executors::LLM::Tool
   def initialize
     super(
@@ -181,126 +214,83 @@ class CustomAnalysisTool < CircuitBreaker::Executors::LLM::Tool
   end
 
   def execute(content:)
-    # Your custom analysis logic here
+    # Your custom analysis logic
   end
 end
 
-# Use custom tools
-assistant = DocumentAssistant.new(
-  model: 'codellama',
-  tools: [CustomAnalysisTool.new]
-)
-```
-
-3. **Configure Ollama Settings**:
-```ruby
-assistant = DocumentAssistant.new(
-  model: 'codellama',
-  ollama_base_url: 'http://custom-ollama-server:11434',
-  system_prompt: "Custom system prompt for specialized analysis"
-)
-```
-
-4. **Extend Analysis Capabilities**:
-- Add new analysis methods to AnalyzeContentTool
-- Create specialized tools for different document types
-- Implement custom improvement suggestions
-
-Example of adding a new analysis capability:
-```ruby
-class AnalyzeContentTool
-  def analyze_technical_depth(content)
-    technical_terms = content.scan(/\b(algorithm|implementation|architecture)\b/i)
-    "Technical depth: #{technical_terms.size} technical terms found"
-  end
+# Use custom tool
+assistant = DocumentAssistant.define do
+  use_model 'qwen2.5-coder'
+  add_tool CustomAnalysisTool.new
 end
 ```
 
-## Key Features
-
-### Policy-Based Workflow DSL
-- Declarative policy definitions for transitions
-- Support for complex validation rules:
-  - `all`: All validations must pass
-  - `any`: At least one validation must pass
-- Support for complex rule combinations:
-  - `all`: All rules must pass
-  - `any`: At least one rule must pass
-- Clear error messages showing which policy failed
-
-### Rules Engine
-- Field presence rules
-- Field comparison rules
-- Value matching rules
-- Custom rule definitions
-- Support for complex rule combinations
-
-### Validation System
-- Field presence validation
-- Value inclusion validation
-- URL format validation
-- Word count validation
-- Support for complex validation combinations
-
-### Workflow Management
-- Policy-based state transition management
-- Automatic rule and validation conversion
-- Comprehensive error handling
-- Detailed transition history tracking
-
-## Best Practices
-
-### 1. Policy Definition
-- Use clear, descriptive rule names
-- Group related rules under `all` or `any`
-- Keep validation requirements clear and focused
-- Use appropriate validation combinations
-
-### 2. Rule Implementation
-- Implement atomic, single-purpose rules
-- Use descriptive rule builders
-- Add debug output for complex rules
-- Test all rule combinations
-
-### 3. Validation Definition
-- Describe the validation requirement clearly
-- Use appropriate validation builders
-- Group validations by purpose
-- Test edge cases and combinations
-
-### 4. Error Handling
-- Provide clear error messages
-- Include context in validation errors
-- Track failed transitions in history
-- Add debug output for troubleshooting
-
-## Example Use Cases
-
-### Document Review Process
+### 3. Workflow Rules
 ```ruby
-# Define a document review workflow with:
-# 1. Reviewer different from author
-# 2. Admin approval required
-# 3. Either word count or external URL required
+# Add custom rule
+rule :meets_deadline,
+     desc: "Document must be submitted before deadline",
+     &before_date(:submission_date, :deadline)
+
+# Use in workflow
 workflow = CircuitBreaker::WorkflowDSL.define do
   flow(:draft >> :pending_review)
     .transition(:submit)
     .policy(
-      validations: { all: [:reviewer_id] },
-      rules: { all: [:has_reviewer, :different_reviewer] }
-    )
-
-  flow(:reviewed >> :approved)
-    .transition(:approve)
-    .policy(
-      validations: {
-        all: [:approver_id, :reviewer_comments],
-        any: [:external_url, :word_count]
-      },
-      rules: {
-        all: [:has_approver, :different_approver_from_reviewer],
-        any: [:is_admin]
-      }
+      rules: { all: [:meets_deadline] }
     )
 end
 ```
+
+## Error Handling
+
+The system includes robust error handling:
+
+1. AI Integration
+   - Connection retry logic
+   - Timeout handling
+   - Response validation
+   - Fallback responses
+
+2. Workflow Validation
+   - Rule violation detection
+   - State transition validation
+   - Input parameter validation
+   - Context validation
+
+3. Document Processing
+   - Content validation
+   - Format verification
+   - Size limit checks
+   - Permission validation
+
+## Best Practices
+
+1. Document Analysis
+   - Use specific context types for better analysis
+   - Provide clear document structure
+   - Include all required sections
+   - Follow formatting guidelines
+
+2. Workflow Management
+   - Define clear transition rules
+   - Implement proper validation
+   - Track state changes
+   - Maintain audit history
+
+3. AI Integration
+   - Configure appropriate timeouts
+   - Handle errors gracefully
+   - Validate AI responses
+   - Monitor performance
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Add tests for new features
+4. Submit a pull request
+
+## License
+
+This example is part of the Circuit Breaker library and is available under the MIT license.
