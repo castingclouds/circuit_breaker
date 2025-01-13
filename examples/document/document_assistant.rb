@@ -459,7 +459,7 @@ module Examples
       end
 
       def analyze_engagement(content)
-        engagement_markers = %w[you your we our let's imagine consider note]
+        engagement_markers = %w[you your we our they them it his her imagine consider note]
         engagement_level = count_matches(content, engagement_markers)
         
         describe_intensity(engagement_level)
