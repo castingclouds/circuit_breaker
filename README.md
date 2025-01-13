@@ -189,6 +189,30 @@ class ChainableTool < CircuitBreaker::Executors::LLM::ChainableTool
 end
 ```
 
+### 4. Petri Net Implementation and Turing Completeness
+
+The workflow engine is built on an extended version of Petri nets with additional features that enhance its computational capabilities:
+
+1. Token System with State
+   - Sophisticated token system maintaining state and data
+   - Support for attributes and validations
+   - Before and after transition hooks
+
+2. Extended Transition Rules
+   - Complex transition rules with conditions
+   - Guard validations and policies
+   - Synchronous and asynchronous transitions
+
+3. Workflow Extensions
+   - Multiple executor types (NATS, Step, Agent)
+   - Parallel execution and flow control
+   - Workflow chaining capabilities
+
+While basic Petri nets are not Turing complete, our implementation is closer to Colored Petri Nets (CPNs) or High-level Petri Nets. The system balances theoretical power with practical utility, providing:
+- Sufficient expressiveness for real-world business processes
+- Analyzability for critical property verification
+- Maintainable and understandable structure through the workflow DSL
+
 ## Examples
 
 See the `examples` directory for complete examples:
