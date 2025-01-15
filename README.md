@@ -5,27 +5,34 @@ Circuit Breaker is a powerful Ruby library that provides a declarative DSL for b
 ## Features
 
 ### 1. Declarative Workflow DSL
-- State-based workflow engine
-- Policy-based transitions
-- Rule validation
-- History tracking
-- Event handling
+- State-based workflow engine with intuitive syntax
+- Policy-based transitions with rule chains
+- Unified rules system for validation and transitions
+- Comprehensive history tracking
+- Event handling and state management
 
-### 2. AI Integration
+### 2. Rules System
+- Unified DSL for defining rules and validations
+- Support for complex rule chains and conditions
+- Built-in helpers for common validations
+- Rule composition with AND/OR logic
+- Clear error reporting and handling
+
+### 3. AI Integration
 - Multiple LLM providers (OpenAI, Ollama)
 - Automatic model detection
 - Tool integration framework
 - Memory management
 - Error handling with retries
 
-### 3. Document Analysis
+### 4. Document Analysis
 - Content quality assessment
 - Sentiment and tone analysis
 - Context detection
 - Improvement suggestions
 - Structure evaluation
 
-### 4. Executors
+### 5. Executors
 - AssistantExecutor for AI-powered tools
 - AgentExecutor for autonomous tasks
 - Custom executor support
@@ -49,73 +56,73 @@ Or install it yourself as:
 $ gem install circuit_breaker
 ```
 
-## Quick Start
+## Usage
 
-### 1. Define a Workflow
+### Creating a Workflow
 
 ```ruby
-workflow = CircuitBreaker::WorkflowDSL.define do
-  # Define states and transitions
+# Define rules
+rules = CircuitBreaker::Rules::DSL.define do
+  rule :valid_reviewer do |token|
+    token.reviewer_id.present?
+  end
+
+  rule :valid_review do |token|
+    token.reviewer_comments.present?
+  end
+end
+
+# Define workflow
+workflow = CircuitBreaker::WorkflowDSL.define(rules: rules) do
+  # Define states
+  states :draft, :pending_review, :reviewed, :approved, :rejected
+
+  # Define transitions with rules
   flow(:draft >> :pending_review)
     .transition(:submit)
-    .policy(
-      validations: { all: [:reviewer_id] },
-      rules: { all: [:has_reviewer, :different_reviewer] }
-    )
+    .policy(rules: { all: [:valid_reviewer] })
 
   flow(:pending_review >> :reviewed)
     .transition(:review)
     .policy(
-      rules: { all: [:has_comments] }
-    )
-
-  flow(:reviewed >> [:approved, :rejected])
-    .transitions(:approve, :reject)
-    .policy(
-      rules: { all: [:is_admin] }
-    )
-end
-```
-
-### 2. Create an AI Assistant
-
-```ruby
-assistant = CircuitBreaker::Executors::AssistantExecutor.define do
-  use_model 'qwen2.5-coder'
-  with_system_prompt "You are a document analysis assistant..."
-  with_parameters temperature: 0.7, top_p: 0.9
-  add_tools [
-    ContentAnalysisTool.new,
-    SentimentAnalysisTool.new,
-    ImprovementTool.new
-  ]
-end
-
-result = assistant
-  .update_context(input: "Analyze this document...")
-  .execute
-```
-
-### 3. Define Custom Tools
-
-```ruby
-class CustomAnalysisTool < CircuitBreaker::Executors::LLM::Tool
-  def initialize
-    super(
-      name: 'custom_analysis',
-      description: 'Performs specialized analysis',
-      parameters: {
-        content: { type: 'string', description: 'Content to analyze' }
+      rules: {
+        all: [:valid_review],
+        any: [:is_high_priority, :is_urgent]
       }
     )
-  end
+end
 
-  def execute(content:)
-    # Your custom analysis logic
-    { result: analyze(content) }
-  end
+# Create and add token
+token = CircuitBreaker::Token.new
+workflow.add_token(token)
+
+# Fire transitions
+workflow.fire_transition(:submit, token)
+```
+
+### History Tracking
+
+The workflow automatically tracks all transitions:
+
+```ruby
+token.history.each do |event|
+  puts "#{event[:timestamp]}: #{event[:transition]} from #{event[:from]} to #{event[:to]}"
 end
 ```
+
+## Architecture
+
+Circuit Breaker uses a hybrid architecture combining:
+
+1. **Workflow Engine**: Based on Petri nets for formal verification
+2. **Rules Engine**: Unified system for validations and transitions
+3. **AI Integration**: Pluggable LLM providers for analysis
+4. **Event System**: Comprehensive tracking and auditing
+
+While basic Petri nets are not Turing complete, our implementation is closer to Colored Petri Nets (CPNs) or High-level Petri Nets. The system balances theoretical power with practical utility, providing:
+- Sufficient expressiveness for real-world business processes
+- Analyzability for critical property verification
+- Maintainable and understandable structure through the workflow DSL
 
 ## Components
 
@@ -188,30 +195,6 @@ class ChainableTool < CircuitBreaker::Executors::LLM::ChainableTool
   end
 end
 ```
-
-### 4. Petri Net Implementation and Turing Completeness
-
-The workflow engine is built on an extended version of Petri nets with additional features that enhance its computational capabilities:
-
-1. Token System with State
-   - Sophisticated token system maintaining state and data
-   - Support for attributes and validations
-   - Before and after transition hooks
-
-2. Extended Transition Rules
-   - Complex transition rules with conditions
-   - Guard validations and policies
-   - Synchronous and asynchronous transitions
-
-3. Workflow Extensions
-   - Multiple executor types (NATS, Step, Agent)
-   - Parallel execution and flow control
-   - Workflow chaining capabilities
-
-While basic Petri nets are not Turing complete, our implementation is closer to Colored Petri Nets (CPNs) or High-level Petri Nets. The system balances theoretical power with practical utility, providing:
-- Sufficient expressiveness for real-world business processes
-- Analyzability for critical property verification
-- Maintainable and understandable structure through the workflow DSL
 
 ## Examples
 

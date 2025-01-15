@@ -2,7 +2,7 @@ require 'securerandom'
 require 'json'
 require 'yaml'
 require 'async'
-require_relative 'validators'
+require_relative 'rules'
 require_relative 'visualizer'
 require_relative 'history'
 
@@ -16,7 +16,7 @@ module CircuitBreaker
     class TransitionError < StandardError; end
 
     attr_reader :id, :created_at, :updated_at
-    attr_accessor :state
+    attr_accessor :state, :history
 
     # Class-level storage for hooks, validations, and transitions
     class << self
@@ -419,6 +419,16 @@ module CircuitBreaker
     # Show all state in inspect for debugging
     def inspect
       pretty_print(true)
+    end
+
+    def record_transition(transition_name, old_state, new_state)
+      @history << {
+        transition: transition_name,
+        from: old_state,
+        to: new_state,
+        timestamp: Time.now
+      }
+      @updated_at = Time.now
     end
 
     protected

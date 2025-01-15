@@ -38,16 +38,13 @@ module CircuitBreaker
     end
 
     class WorkflowBuilder
-      include Validators
-
       attr_reader :states, :transitions, :before_flows, :rules
 
       def initialize(rules = nil)
         @states = []
         @transitions = {}
         @before_flows = []
-        @rules = rules || RulesEngine::DSL.define
-        @validators = ValidatorChain.new
+        @rules = rules || Rules::DSL.define
       end
 
       def states(*states)
@@ -55,287 +52,162 @@ module CircuitBreaker
         self
       end
 
-      def flow(transition)
-        if transition.is_a?(StateTransition)
-          @states |= [transition.from_state, transition.to_state]
-          StateTransitionBuilder.new(self, transition)
-        else
-          from, to = case transition
-          when Hash
-            transition.first
-          when String
-            transition.split(">>").map(&:strip).map(&:to_sym)
-          else
-            [transition.instance_variable_get(:@from_state), transition.instance_variable_get(:@to_state)]
-          end
-          @states |= [from, to]
-          StateTransitionBuilder.new(self, StateTransition.new(from, to))
-        end
+      def flow(state_transition)
+        StateTransitionBuilder.new(self, state_transition)
+      end
+
+      def transition(name, from:, to:)
+        @transitions[name] = TransitionBuilder.new(name, from, to)
+      end
+
+      def policy(rules: {})
+        transition = @transitions.values.last
+        transition.rules = rules
+        self
       end
 
       def before_flow(&block)
         @before_flows << block
-      end
-
-      def transition(name, from:, to:)
-        @current_name = name
-        @transitions[name] = { from: from, to: to }
         self
       end
 
-      def validate(*field_names)
-        raise "No current transition name" unless @current_name
-        @transitions[@current_name][:guard] = ->(token) { @validators.chain(token).validate(*field_names).valid? }
-        @transitions[@current_name][:validations] = field_names
-        self
-      end
-
-      def validate_any(*field_names)
-        raise "No current transition name" unless @current_name
-        @transitions[@current_name][:guard] = ->(token) { @validators.chain(token).or_validate(*field_names).valid? }
-        @transitions[@current_name][:validations_any] = field_names
-        self
-      end
-
-      def rules(*rule_names)
-        raise "No current transition name" unless @current_name
-        @transitions[@current_name][:guard] = ->(token) { 
-          rule_names.all? { |rule| @rules.evaluate(rule, token) }
-        }
-        @transitions[@current_name][:rules] = rule_names
-        self
-      end
-
-      def rules_any(*rule_names)
-        raise "No current transition name" unless @current_name
-        @transitions[@current_name][:guard] = ->(token) { 
-          rule_names.any? { |rule| @rules.evaluate(rule, token) }
-        }
-        @transitions[@current_name][:rules_any] = rule_names
-        self
-      end
-
-      def policy(options)
-        raise "No current transition name" unless @current_name
-        
-        @transitions[@current_name][:guard] = ->(token) {
-          begin
-            validations_result = true
-            rules_result = true
-
-            if options[:validations]
-              validations_result = case options[:validations]
-              when Array
-                @validators.chain(token).validate(*options[:validations]).valid?
-              when Hash
-                options[:validations].all? do |key, fields|
-                  case key
-                  when :any
-                    @validators.chain(token).or_validate(*fields).valid?
-                  when :all
-                    @validators.chain(token).validate(*fields).valid?
-                  else
-                    raise "Unknown validation type: #{key}"
-                  end
-                end
-              end
-            end
-
-            if options[:rules]
-              rules_result = case options[:rules]
-              when Array
-                options[:rules].all? { |rule| @rules.evaluate(rule, token) }
-              when Hash
-                all_rules_result = true
-                any_rules_result = true
-
-                if options[:rules][:all]
-                  all_rules_result = options[:rules][:all].all? do |rule|
-                    begin
-                      result = @rules.evaluate(rule, token)
-                      puts "ALL rule '#{rule}' evaluated to #{result}"
-                      result
-                    rescue StandardError => e
-                      puts "Rule '#{rule}' failed: #{e.message}"
-                      raise
-                    end
-                  end
-                end
-
-                if options[:rules][:any]
-                  any_rules_result = options[:rules][:any].any? do |rule|
-                    begin
-                      result = @rules.evaluate(rule, token)
-                      puts "ANY rule '#{rule}' evaluated to #{result}"
-                      result
-                    rescue StandardError => e
-                      puts "Rule '#{rule}' failed: #{e.message}"
-                      false
-                    end
-                  end
-                end
-
-                all_rules_result && (options[:rules][:any].nil? || any_rules_result)
-              end
-            end
-
-            result = validations_result && rules_result
-            puts "Policy evaluation: validations=#{validations_result}, rules=#{rules_result}, final=#{result}"
-            result
-          rescue StandardError => e
-            puts "Policy evaluation failed: #{e.message}"
-            raise
-          end
-        }
-
-        @transitions[@current_name][:policy] = options
-        self
-      end
-
-      def build_workflow
-        workflow = Workflow.new(
+      def build
+        Workflow.new(
           states: @states,
-          transitions: @transitions,
+          transitions: @transitions.values.map(&:build),
           before_flows: @before_flows,
           rules: @rules
         )
+      end
+    end
 
-        # Convert policy guards into workflow rules
-        @transitions.each do |name, transition|
-          if transition[:policy]
-            # Convert policy validations into rules
-            if transition[:policy][:validations]
-              case transition[:policy][:validations]
-              when Array
-                workflow.add_rule(name, ->(token) {
-                  @validators.chain(token).validate(*transition[:policy][:validations]).valid?
-                })
-              when Hash
-                workflow.add_rule(name, ->(token) {
-                  transition[:policy][:validations].all? do |key, fields|
-                    case key
-                    when :any
-                      @validators.chain(token).or_validate(*fields).valid?
-                    when :all
-                      @validators.chain(token).validate(*fields).valid?
-                    else
-                      raise "Unknown validation type: #{key}"
-                    end
-                  end
-                })
-              end
-            end
+    class TransitionBuilder
+      attr_accessor :name, :from_state, :to_state, :rules
 
-            # Convert policy rules into workflow rules
-            if transition[:policy][:rules]
-              case transition[:policy][:rules]
-              when Array
-                transition[:policy][:rules].each do |rule|
-                  workflow.add_rule(name, rule)
-                end
-              when Hash
-                workflow.add_rule(name, ->(token) {
-                  all_rules_result = true
-                  any_rules_result = true
+      def initialize(name, from_state, to_state)
+        @name = name
+        @from_state = from_state
+        @to_state = to_state
+        @rules = {}
+      end
 
-                  if transition[:policy][:rules][:all]
-                    all_rules_result = transition[:policy][:rules][:all].all? do |rule|
-                      @rules.evaluate(rule, token)
-                    end
-                  end
+      def policy(rules: {})
+        @rules = rules
+        self
+      end
 
-                  if transition[:policy][:rules][:any]
-                    any_rules_result = transition[:policy][:rules][:any].any? do |rule|
-                      @rules.evaluate(rule, token)
-                    end
-                  end
+      def build
+        Transition.new(
+          name: @name,
+          from_state: @from_state,
+          to_state: @to_state,
+          rules: @rules
+        )
+      end
+    end
 
-                  all_rules_result && (transition[:policy][:rules][:any].nil? || any_rules_result)
-                })
-              end
+    class Transition
+      attr_reader :name, :from_state, :to_state, :rules
+
+      def initialize(name:, from_state:, to_state:, rules:)
+        @name = name
+        @from_state = from_state
+        @to_state = to_state
+        @rules = rules
+      end
+
+      def validate_rules(token, rules_dsl)
+        return true if @rules.empty?
+
+        # Check all required rules
+        if @rules[:all]
+          @rules[:all].each do |rule|
+            unless rules_dsl.evaluate(rule, token)
+              raise "Rule '#{rule}' failed for transition '#{@name}'"
             end
           end
         end
 
-        workflow.extend(PrettyPrint)
-        workflow
+        # Check any required rules
+        if @rules[:any]
+          unless @rules[:any].any? { |rule| rules_dsl.evaluate(rule, token) }
+            raise "None of the rules #{@rules[:any]} passed for transition '#{@name}'"
+          end
+        end
+
+        true
+      end
+    end
+
+    module PrettyPrint
+      def pretty_print
+        puts "States:"
+        puts "  #{@states.join(' -> ')}"
+        puts "\nTransitions:"
+        @transitions.each do |transition|
+          puts "  #{transition.name}: #{transition.from_state} -> #{transition.to_state}"
+          if transition.rules && !transition.rules.empty?
+            puts "    Rules:"
+            if transition.rules[:all]
+              puts "      All of:"
+              transition.rules[:all].each { |rule| puts "        - #{rule}" }
+            end
+            if transition.rules[:any]
+              puts "      Any of:"
+              transition.rules[:any].each { |rule| puts "        - #{rule}" }
+            end
+          end
+        end
+      end
+    end
+
+    class Workflow
+      include PrettyPrint
+
+      attr_reader :states, :transitions, :before_flows, :rules, :tokens
+
+      def initialize(states:, transitions:, before_flows:, rules:)
+        @states = states
+        @transitions = transitions
+        @before_flows = before_flows
+        @rules = rules
+        @tokens = []
+      end
+
+      def add_token(token)
+        token.state = @states.first if token.state.nil?
+        @tokens << token
+      end
+
+      def fire_transition(transition_name, token)
+        transition = find_transition(transition_name, token.state)
+        raise "Invalid transition '#{transition_name}' for state '#{token.state}'" unless transition
+
+        # Run any before_flow blocks
+        @before_flows.each { |block| block.call(token) }
+
+        # Validate rules
+        transition.validate_rules(token, @rules)
+
+        # Update token state and record the transition
+        old_state = token.state
+        token.state = transition.to_state
+        token.record_transition(transition_name, old_state, token.state)
+
+        token
+      end
+
+      private
+
+      def find_transition(name, current_state)
+        @transitions.find { |t| t.name == name && t.from_state == current_state }
       end
     end
 
     def self.define(rules: nil, &block)
       builder = WorkflowBuilder.new(rules)
       builder.instance_eval(&block)
-      builder.build_workflow
-    end
-
-    module PrettyPrint
-      def pretty_print
-        puts "\nWorkflow States and Transitions:"
-        puts "=============================="
-        @states.each do |state|
-          puts "State: #{state}"
-          transitions_from_state = @transitions.select { |_, t| t[:from] == state }
-          if transitions_from_state.any?
-            transitions_from_state.each do |name, transition|
-              puts "  └─> #{transition[:to]} (via :#{name})"
-              if transition[:rules]
-                puts "      Required rules: #{transition[:rules].join(', ')}"
-                transition[:rules].each do |rule|
-                  desc = @rules.description(rule)
-                  puts "        - #{desc}" if desc
-                end
-              end
-              if transition[:rules_any]
-                puts "      Any of these rules: #{transition[:rules_any].join(', ')}"
-                transition[:rules_any].each do |rule|
-                  desc = @rules.description(rule)
-                  puts "        - #{desc}" if desc
-                end
-              end
-              if transition[:validations]
-                puts "      Required validations: #{transition[:validations].join(', ')}"
-                transition[:validations].each do |validation|
-                  desc = @validators.description(validation)
-                  puts "        - #{desc}" if desc
-                end
-              end
-              if transition[:validations_any]
-                puts "      Any of these validations: #{transition[:validations_any].join(', ')}"
-                transition[:validations_any].each do |validation|
-                  desc = @validators.description(validation)
-                  puts "        - #{desc}" if desc
-                end
-              end
-              if transition[:policy]
-                puts "      Policy:"
-                if transition[:policy][:validations]
-                  puts "        Validations:"
-                  case transition[:policy][:validations]
-                  when Array
-                    puts "          All: #{transition[:policy][:validations].join(', ')}"
-                  when Hash
-                    transition[:policy][:validations].each do |key, fields|
-                      puts "          #{key.to_s.capitalize}: #{fields.join(', ')}"
-                    end
-                  end
-                end
-                if transition[:policy][:rules]
-                  puts "        Rules:"
-                  case transition[:policy][:rules]
-                  when Array
-                    puts "          All: #{transition[:policy][:rules].join(', ')}"
-                  when Hash
-                    transition[:policy][:rules].each do |key, rules|
-                      puts "          #{key.to_s.capitalize}: #{rules.join(', ')}"
-                    end
-                  end
-                end
-              end
-            end
-          end
-          puts
-        end
-      end
+      builder.build
     end
   end
 end
