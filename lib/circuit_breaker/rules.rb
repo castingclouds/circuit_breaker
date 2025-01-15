@@ -37,13 +37,16 @@ module CircuitBreaker
     end
 
     class DSL
-      def self.define(&block)
-        new.tap { |dsl| dsl.instance_eval(&block) }
-      end
-
       def initialize
         @rules = {}
         @descriptions = {}
+        @context = nil
+      end
+
+      def self.define(&block)
+        dsl = new
+        dsl.instance_eval(&block) if block_given?
+        dsl
       end
 
       def rule(name, desc = nil, &block)
@@ -54,7 +57,10 @@ module CircuitBreaker
       def evaluate(rule_name, token)
         raise RuleError, "Unknown rule: #{rule_name}" unless @rules.key?(rule_name)
         
+        puts "Evaluating rule '#{rule_name}' for token #{token.id}"
+        puts "  Context: #{@context.inspect}"
         result = @rules[rule_name].call(token)
+        puts "  Result: #{result.inspect}"
         case result
         when RuleResult
           result.valid?
@@ -77,6 +83,18 @@ module CircuitBreaker
 
       def description(name)
         @descriptions[name]
+      end
+
+      def with_context(context)
+        old_context = @context
+        @context = context
+        yield
+      ensure
+        @context = old_context
+      end
+
+      def context
+        @context
       end
 
       # Helper methods for common rule conditions
