@@ -4,8 +4,7 @@ require 'securerandom'
 require 'set'
 require_relative 'circuit_breaker/token'
 require_relative 'circuit_breaker/workflow_dsl'
-require_relative 'circuit_breaker/rules_engine'
-require_relative 'circuit_breaker/validators' 
+require_relative 'circuit_breaker/rules'
 
 # Module for implementing a Circuit Breaker pattern using a Petri net
 module CircuitBreaker
@@ -119,12 +118,12 @@ module CircuitBreaker
   # Represents a transition in the Petri net workflow
   # Transitions connect places and can have guard conditions
   class Transition
-    attr_reader :name, :from, :to, :input_arcs, :output_arcs, :guard
+    attr_reader :name, :from_state, :to_state, :input_arcs, :output_arcs, :guard
 
     def initialize(name:, from:, to:)
       @name = name
-      @from = from
-      @to = to
+      @from_state = from
+      @to_state = to
       @input_arcs = []
       @output_arcs = []
       @guard = nil
@@ -160,121 +159,77 @@ module CircuitBreaker
   # Main workflow class that manages the Petri net
   # Can be created from a configuration or built programmatically
   class Workflow
-    include Validators 
-
-    attr_writer :states
+    attr_reader :places, :transitions, :tokens, :rules
 
     def initialize(states: [], transitions: {}, before_flows: [], rules: [])
-      @states = states
+      @places = {}
       @transitions = {}
-      @validators = {}
       @tokens = Set.new
-      @rules = rules || RulesEngine::DSL.define
+      @rules = rules
+      @before_flows = before_flows
 
-      # Initialize transitions
+      self.states = states
       transitions.each do |transition, data|
         add_transition(transition, data[:from], data[:to])
-        add_required_fields(transition, data[:required_fields]) if data[:required_fields]
-        data[:rules]&.each { |rule| add_rule(transition, rule) }
-      end
-
-      # Add before flow validators
-      before_flows.each do |block|
-        add_validator(:before, block)
+        @transitions[transition].set_guard do |token|
+          data[:rules]&.each { |rule| return false unless @rules.evaluate(rule, token) }
+          true
+        end
       end
     end
 
     def states=(state_list)
-      @states = state_list
-    end
-
-    def add_validator(type, validator)
-      @validators[type] ||= []
-      @validators[type] << validator
-    end
-
-    def validate_token(token)
-      return unless @validators
-
-      @validators.each do |type, validators|
-        validators.each do |validator|
-          result = validator.call(token)
-          case result
-          when ValidationResult
-            unless result.valid?
-              raise Token::ValidationError, "Validation failed: #{result}"
-            end
-          when false
-            raise Token::ValidationError, "Validation failed"
-          end
-        end
+      state_list.each do |state|
+        @places[state] = Place.new(state)
       end
-    end
-
-    def add_transition(name, from, to)
-      @transitions[name] = {
-        from: from,
-        to: to
-      }
-    end
-
-    def add_required_fields(transition, fields)
-      @transitions[transition][:required_fields] = fields
-    end
-
-    def add_rule(transition, rule)
-      @transitions[transition][:rules] ||= []
-      @transitions[transition][:rules] << rule
     end
 
     def add_token(token)
-      token.state ||= @states.first
-      validate_token(token)
-      @tokens << token
-      token
+      token.state = @places.keys.first if token.state.nil?
+      @tokens.add(token)
+      @places[token.state].add_token(token)
     end
 
     def fire_transition(transition_name, token)
-      raise Token::TransitionError, "Token not in workflow" unless @tokens.include?(token)
-      
       transition = @transitions[transition_name]
-      raise Token::TransitionError, "Unknown transition: #{transition_name}" unless transition
-      
-      # Validate current state
-      unless token.state == transition[:from]
-        raise Token::TransitionError, "Token in wrong state: expected #{transition[:from]}, got #{token.state}"
-      end
-      
-      validate_token(token)
+      raise "Invalid transition: #{transition_name}" unless transition
+      raise "Invalid state: #{token.state}" unless @places[token.state]
+      raise "Token not in workflow" unless @tokens.include?(token)
 
-      # Validate required fields
-      if transition[:required_fields]
-        transition[:required_fields].each do |field|
-          value = token.send(field)
-          if value.nil? || (value.respond_to?(:empty?) && value.empty?)
-            raise Token::ValidationError, "Required field '#{field}' is missing"
-          end
-        end
-      end
-      
-      # Validate transition rules
-      if transition[:rules]
-        transition[:rules].each do |rule|
-          begin
-            result = rule.is_a?(Proc) ? rule.call(token) : @rules.evaluate(rule, token)
-            unless result
-              raise Token::TransitionError, "Rule '#{rule}' failed for transition #{transition_name}"
-            end
-          rescue StandardError => e
-            raise Token::TransitionError, "Rule evaluation failed: #{e.message}"
-          end
-        end
+      # Run any before_flow blocks
+      @before_flows.each { |block| block.call(token) }
+
+      # Check if transition is valid
+      unless transition.from_state == token.state
+        raise "Cannot fire transition '#{transition_name}' from state '#{token.state}'"
       end
 
-      # Update token state
+      # Try to fire the transition
+      unless transition.can_fire?(token)
+        raise "Transition '#{transition_name}' cannot fire"
+      end
+
+      # Move token to new state
+      @places[token.state].remove_token
       old_state = token.state
-      token.state = transition[:to]
-      token.notify(:state_changed, old_state: old_state, new_state: token.state)
+      token.state = transition.to_state
+      @places[token.state].add_token(token)
+
+      # Record the transition
+      token.record_transition(transition_name, old_state, token.state)
+
+      token
+    end
+
+    private
+
+    def add_transition(name, from, to)
+      transition = Transition.new(name: name, from: from, to: to)
+      @transitions[name] = transition
+
+      # Add arcs
+      @places[from].add_output_arc(transition)
+      transition.add_output_arc(@places[to])
     end
   end
 end

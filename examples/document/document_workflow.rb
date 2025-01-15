@@ -2,7 +2,6 @@ require_relative '../../lib/circuit_breaker'
 require_relative '../../lib/circuit_breaker/executors/assistant_executor'
 require_relative 'document_token'
 require_relative 'document_rules'
-require_relative 'document_validators'
 require_relative 'document_assistant'
 
 # Example of a document workflow using a more declarative DSL approach
@@ -12,9 +11,8 @@ module Examples
       puts "Starting Document Workflow Example (DSL Version)..."
       puts "================================================\n"
 
-      # Initialize document-specific rules and validators
+      # Initialize document-specific rules
       rules = DocumentRules.define
-      validators = DocumentValidators.define
 
       workflow = CircuitBreaker::WorkflowDSL.define(rules: rules) do
         # Define all possible document states
@@ -25,46 +23,43 @@ module Examples
               :approved,         # Document has been approved by approver
               :rejected         # Document was rejected and needs revision
 
-        # Define transitions with required fields and rules
+        # Define transitions with required rules
         flow(:draft >> :pending_review)
           .transition(:submit)
           .policy(
-            validations: { all: [:reviewer_id] },
-            rules: { all: [:has_reviewer, :different_reviewer] }
+            rules: { 
+              all: [:valid_reviewer]
+            }
           )
 
         flow(:pending_review >> :reviewed)
           .transition(:review)
           .policy(
-            validations: { all: [:reviewer_comments] },
             rules: {
-              all: [:has_comments],
-              any: [:high_priority, :urgent]
+              all: [:valid_review],
+              any: [:is_high_priority, :is_urgent]
             }
           )
 
         flow(:reviewed >> :approved)
           .transition(:approve)
           .policy(
-            validations: {
-              all: [:approver_id, :reviewer_comments],
-              any: [:external_url, :word_count]
-            },
             rules: {
               all: [
-                :has_approver,
-                :different_approver_from_reviewer,
-                :different_approver_from_author
+                :valid_approver,
+                :valid_review,
+                :is_admin_approver
               ],
-              any: [:is_admin]
+              any: [:valid_external_url, :valid_word_count]
             }
           )
 
         flow(:reviewed >> :rejected)
           .transition(:reject)
           .policy(
-            validations: { all: [:rejection_reason] },
-            rules: { all: [:has_rejection] }
+            rules: { 
+              all: [:valid_rejection_process]
+            }
           )
 
         # Simple transition without requirements
@@ -114,7 +109,6 @@ module Examples
         puts "Current state: #{token.state}"
         puts "Reviewer: #{token.reviewer_id}\n\n"
         
-
         # Step 2: Review document
         puts "Step 2: Reviewing document..."
         token.reviewer_comments = "This is a detailed review with suggestions for improvement. The proposal needs more budget details."
@@ -139,7 +133,7 @@ module Examples
       puts "\nDocument History:"
       puts "----------------"
       token.history.each do |event|
-        puts "#{event.timestamp}: #{event.type} - #{event.details}"
+        puts "#{event[:timestamp]}: #{event[:transition]} from #{event[:from]} to #{event[:to]}"
       end
     end
   end
