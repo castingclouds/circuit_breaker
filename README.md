@@ -63,7 +63,7 @@ $ gem install circuit_breaker-wf
 Circuit Breaker provides a powerful mechanism for passing data between actions and rules during workflow transitions. Here's how it works:
 
 ### Creating a Workflow
-1. Define Workflow
+
 ```ruby
 workflow = CircuitBreaker::Workflow::DSL.define do
   # Define states
