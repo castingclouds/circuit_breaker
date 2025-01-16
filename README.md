@@ -1,6 +1,6 @@
 # Circuit Breaker
 
-Circuit Breaker is a powerful Ruby library that provides a declarative DSL for building AI-powered workflows and assistants. It seamlessly integrates with various LLM providers and offers robust tools for document analysis, workflow management, and autonomous agents.
+A powerful Ruby library for building AI-powered workflows with Agents and Assistants powered by Petri Nets.. It seamlessly integrates with various LLM providers and offers robust tools for document analysis, workflow management, and autonomous agents.
 
 ## Features
 
@@ -25,25 +25,25 @@ Circuit Breaker is a powerful Ruby library that provides a declarative DSL for b
 - Memory management
 - Error handling with retries
 
-### 4. Document Analysis
+### 4. Executors
+- AssistantExecutor for AI-powered tools
+- AgentExecutor for autonomous tasks
+- Custom executor support
+- Chainable tool pipelines
+
+### 5. Document Analysis (Example)
 - Content quality assessment
 - Sentiment and tone analysis
 - Context detection
 - Improvement suggestions
 - Structure evaluation
 
-### 5. Executors
-- AssistantExecutor for AI-powered tools
-- AgentExecutor for autonomous tasks
-- Custom executor support
-- Chainable tool pipelines
-
 ## Installation
 
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'circuit_breaker'
+gem 'circuit_breaker-wf'
 ```
 
 And then execute:
@@ -53,7 +53,7 @@ $ bundle install
 
 Or install it yourself as:
 ```bash
-$ gem install circuit_breaker
+$ gem install circuit_breaker-wf
 ```
 
 ## Usage
@@ -62,12 +62,43 @@ $ gem install circuit_breaker
 
 Circuit Breaker provides a powerful mechanism for passing data between actions and rules during workflow transitions. Here's how it works:
 
-1. **Actions with Named Results**
+### Creating a Workflow
+1. Define Workflow
+```ruby
+workflow = CircuitBreaker::Workflow::DSL.define do
+  # Define states
+  states :draft, :pending_review, :reviewed, :approved, :rejected
+
+  # Define transitions with rules
+  flow(:draft >> :pending_review), :submit do
+     policy all: [:valid_reviewer]
+  end
+
+  flow(:pending_review >> :reviewed), :review do
+    policy all: [:valid_review],
+           any: [:is_high_priority, :is_urgent]
+  end
+end
+```
+
+# Create and add token
+```ruby
+token = CircuitBreaker::Token.new
+workflow.add_token(token)
+```
+
+# Fire transitions
+```ruby
+workflow.fire_transition(:submit, token)
+```
+
+### Action-Rule Data Flow
+1. **Actions with Anonymous Results**
 ```ruby
 flow :draft >> :pending_review, :submit do
   actions do
-    # Execute action and store result with key :clarity
-    execute analyzer, :analyze_clarity, :clarity
+    # Execute action and store result in context
+    execute analyzer, :analyze_clarity
   end
   policy all: [:valid_clarity]
 end
@@ -95,48 +126,6 @@ This pattern allows for:
 - Reusable actions with different validation rules
 - Complex rule chains based on multiple action results
 - Clear data flow tracking during transitions
-
-### Creating a Workflow
-
-```ruby
-# Define rules
-rules = CircuitBreaker::Rules::DSL.define do
-  rule :valid_reviewer do |token|
-    token.reviewer_id.present?
-  end
-
-  rule :valid_review do |token|
-    token.reviewer_comments.present?
-  end
-end
-
-# Define workflow
-workflow = CircuitBreaker::WorkflowDSL.define(rules: rules) do
-  # Define states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-
-  # Define transitions with rules
-  flow(:draft >> :pending_review)
-    .transition(:submit)
-    .policy(rules: { all: [:valid_reviewer] })
-
-  flow(:pending_review >> :reviewed)
-    .transition(:review)
-    .policy(
-      rules: {
-        all: [:valid_review],
-        any: [:is_high_priority, :is_urgent]
-      }
-    )
-end
-
-# Create and add token
-token = CircuitBreaker::Token.new
-workflow.add_token(token)
-
-# Fire transitions
-workflow.fire_transition(:submit, token)
-```
 
 ### History Tracking
 
@@ -180,10 +169,9 @@ rule :has_reviewer,
      desc: "Document must have a reviewer assigned",
      &requires(:reviewer_id)
 
-# Define validations
-validator :title,
-         desc: "Document title is required",
-         &must_be_present(:title)
+rule :title,
+     desc: "Document title is required",
+     &must_be_present(:title)
 
 # Create workflow instance
 workflow = DocumentWorkflow.new(document)
