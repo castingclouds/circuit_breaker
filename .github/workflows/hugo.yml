@@ -37,6 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: docs
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
@@ -44,7 +45,7 @@ jobs:
         run: "[[ -f package-lock.json || -f npm-shrinkwrap.json ]] && npm ci || true"
       - name: Check Hugo config
         run: |
-          if [ ! -f config.toml ] && [ ! -f config.yaml ] && [ ! -f config.json ]; then
+          if [ ! -f docs/config.toml ] && [ ! -f docs/config.yaml ] && [ ! -f docs/config.json ]; then
             echo "Hugo config file not found. Please ensure the site is initialized and the config file exists."
             exit 1
           fi
@@ -55,7 +56,8 @@ jobs:
         run: |
           hugo \
             --minify \
-            --baseURL "${{ steps.pages.outputs.base_url }}/"
+            --baseURL "${{ steps.pages.outputs.base_url }}/" \
+            --config docs/config.toml
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
