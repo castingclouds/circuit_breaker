@@ -2,3 +2,7 @@
 **.iml
 bin
 .DS_Store
+*.gem
+*.lock
+.idea
+.vscode

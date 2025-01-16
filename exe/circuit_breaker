@@ -1,0 +1,233 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'yaml'
+require_relative '../lib/circuit_breaker'
+
+module CircuitBreaker
+  class CLI
+    def self.run(args)
+      new.run(args)
+    end
+
+    def run(args)
+      command = args.shift
+      case command
+      when 'init'
+        init_workflow(args)
+      when 'start'
+        start_workflow(args)
+      when 'validate'
+        validate_workflow(args)
+      when 'export'
+        export_workflow(args)
+      when 'list'
+        list_workflows
+      else
+        show_help
+      end
+    end
+
+    private
+
+    def init_workflow(args)
+      options = parse_init_options(args)
+      template = generate_workflow_template(options)
+      
+      File.write(options[:output], template)
+      puts "Created new workflow at #{options[:output]}"
+    end
+
+    def start_workflow(args)
+      options = parse_start_options(args)
+      workflow = load_workflow(options[:file])
+      
+      puts "Starting workflow with configuration:"
+      puts YAML.dump(workflow[:config])
+      
+      # Start the workflow (implementation depends on your needs)
+      CircuitBreaker::Workflow.new(workflow).start
+    end
+
+    def validate_workflow(args)
+      options = parse_validate_options(args)
+      workflow = load_workflow(options[:file])
+      
+      puts "Workflow is valid!"
+    rescue StandardError => e
+      puts "Error: #{e.message}"
+      exit 1
+    end
+
+    def export_workflow(args)
+      options = parse_export_options(args)
+      workflow = load_workflow(options[:file])
+      
+      case options[:format]
+      when 'json'
+        File.write(options[:output], JSON.pretty_generate(workflow))
+      when 'yaml'
+        File.write(options[:output], workflow.to_yaml)
+      end
+      
+      puts "Exported workflow to #{options[:output]}"
+    end
+
+    def list_workflows
+      # Implementation depends on how you want to store/discover workflows
+      puts "Available workflows:"
+      Dir.glob("**/*.{yml,yaml,json}").each do |file|
+        next unless workflow?(file)
+        puts "- #{file}"
+      end
+    end
+
+    def workflow?(file)
+      content = YAML.load_file(file) rescue nil
+      return false unless content
+      content.key?('places') && content.key?('transitions')
+    rescue
+      false
+    end
+
+    def load_workflow(file)
+      case File.extname(file)
+      when '.yml', '.yaml'
+        CircuitBreaker::WorkflowDSL.load_yaml(file)
+      when '.json'
+        CircuitBreaker::WorkflowDSL.load_json(file)
+      else
+        raise "Unsupported file format: #{file}"
+      end
+    end
+
+    def generate_workflow_template(options)
+      template = {
+        states: ['backlog', 'in_progress', 'done'],
+        special_states: ['blocked'],
+        transitions: [
+          { from: 'backlog', to: 'in_progress', via: 'start_work' },
+          { from: 'in_progress', to: 'done', via: 'complete_work' },
+          { from: ['backlog', 'in_progress'], to: 'blocked', via: 'block' }
+        ],
+        config: {
+          nats_url: options[:nats_url],
+          log_level: options[:log_level],
+          metrics_enabled: options[:metrics_enabled]
+        }
+      }
+
+      case File.extname(options[:output])
+      when '.yml', '.yaml'
+        template.to_yaml
+      when '.json'
+        JSON.pretty_generate(template)
+      else
+        raise "Unsupported output format: #{options[:output]}"
+      end
+    end
+
+    def parse_init_options(args)
+      options = {
+        output: 'workflow.yml',
+        nats_url: 'nats://localhost:4222',
+        log_level: 'info',
+        metrics_enabled: true
+      }
+
+      OptionParser.new do |opts|
+        opts.banner = "Usage: circuit_breaker init [options]"
+        
+        opts.on("-o", "--output FILE", "Output file (default: workflow.yml)") do |v|
+          options[:output] = v
+        end
+        
+        opts.on("--nats-url URL", "NATS server URL") do |v|
+          options[:nats_url] = v
+        end
+        
+        opts.on("--log-level LEVEL", "Log level") do |v|
+          options[:log_level] = v
+        end
+        
+        opts.on("--[no-]metrics", "Enable/disable metrics") do |v|
+          options[:metrics_enabled] = v
+        end
+      end.parse!(args)
+
+      options
+    end
+
+    def parse_start_options(args)
+      options = { file: nil }
+      
+      OptionParser.new do |opts|
+        opts.banner = "Usage: circuit_breaker start WORKFLOW_FILE [options]"
+      end.parse!(args)
+      
+      options[:file] = args.shift
+      raise "No workflow file specified" unless options[:file]
+      
+      options
+    end
+
+    def parse_validate_options(args)
+      options = { file: nil }
+      
+      OptionParser.new do |opts|
+        opts.banner = "Usage: circuit_breaker validate WORKFLOW_FILE [options]"
+      end.parse!(args)
+      
+      options[:file] = args.shift
+      raise "No workflow file specified" unless options[:file]
+      
+      options
+    end
+
+    def parse_export_options(args)
+      options = {
+        file: nil,
+        output: nil,
+        format: 'yaml'
+      }
+      
+      OptionParser.new do |opts|
+        opts.banner = "Usage: circuit_breaker export WORKFLOW_FILE [options]"
+        
+        opts.on("-o", "--output FILE", "Output file") do |v|
+          options[:output] = v
+        end
+        
+        opts.on("-f", "--format FORMAT", "Output format (yaml/json)") do |v|
+          options[:format] = v
+        end
+      end.parse!(args)
+      
+      options[:file] = args.shift
+      raise "No workflow file specified" unless options[:file]
+      options[:output] ||= "workflow.#{options[:format]}"
+      
+      options
+    end
+
+    def show_help
+      puts <<~HELP
+        Circuit Breaker Workflow CLI
+
+        Commands:
+          init      Create a new workflow file
+          start     Start a workflow
+          validate  Validate a workflow file
+          export    Export workflow to different format
+          list      List available workflows
+          help      Show this help message
+
+        See 'circuit_breaker COMMAND --help' for more information on a specific command.
+      HELP
+    end
+  end
+end
+
+if __FILE__ == $0
+  CircuitBreaker::CLI.run(ARGV)
+end
