@@ -1,49 +1,49 @@
 # Circuit Breaker
 
-Circuit Breaker is a powerful Ruby library that provides a declarative DSL for building AI-powered workflows and assistants. It seamlessly integrates with various LLM providers and offers robust tools for document analysis, workflow management, and autonomous agents.
+A powerful Ruby library for building AI-powered workflows with Agents and Assistants powered by Petri Nets.. It seamlessly integrates with various LLM providers and offers robust tools for document analysis, workflow management, and autonomous agents.
 
 ## Features
 
-### 1. Declarative Workflow DSL
+### Declarative Workflow DSL
 - State-based workflow engine with intuitive syntax
 - Policy-based transitions with rule chains
 - Unified rules system for validation and transitions
 - Comprehensive history tracking
 - Event handling and state management
 
-### 2. Rules System
+### Rules System
 - Unified DSL for defining rules and validations
 - Support for complex rule chains and conditions
 - Built-in helpers for common validations
 - Rule composition with AND/OR logic
 - Clear error reporting and handling
 
-### 3. AI Integration
+### AI Integration
 - Multiple LLM providers (OpenAI, Ollama)
 - Automatic model detection
 - Tool integration framework
 - Memory management
 - Error handling with retries
 
-### 4. Document Analysis
+### Executors
+- AssistantExecutor for AI-powered tools
+- AgentExecutor for autonomous tasks
+- Custom executor support
+- Chainable tool pipelines
+
+### Document Analysis (Example)
 - Content quality assessment
 - Sentiment and tone analysis
 - Context detection
 - Improvement suggestions
 - Structure evaluation
 
-### 5. Executors
-- AssistantExecutor for AI-powered tools
-- AgentExecutor for autonomous tasks
-- Custom executor support
-- Chainable tool pipelines
-
 ## Installation
 
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'circuit_breaker'
+gem 'circuit_breaker-wf'
 ```
 
 And then execute:
@@ -53,7 +53,7 @@ $ bundle install
 
 Or install it yourself as:
 ```bash
-$ gem install circuit_breaker
+$ gem install circuit_breaker-wf
 ```
 
 ## Usage
@@ -62,12 +62,43 @@ $ gem install circuit_breaker
 
 Circuit Breaker provides a powerful mechanism for passing data between actions and rules during workflow transitions. Here's how it works:
 
-1. **Actions with Named Results**
+### Creating a Workflow
+1. Define Workflow
+```ruby
+workflow = CircuitBreaker::Workflow::DSL.define do
+  # Define states
+  states :draft, :pending_review, :reviewed, :approved, :rejected
+
+  # Define transitions with rules
+  flow(:draft >> :pending_review), :submit do
+     policy all: [:valid_reviewer]
+  end
+
+  flow(:pending_review >> :reviewed), :review do
+    policy all: [:valid_review],
+           any: [:is_high_priority, :is_urgent]
+  end
+end
+```
+
+### Create and add token
+```ruby
+token = CircuitBreaker::Token.new
+workflow.add_token(token)
+```
+
+### Fire transitions
+```ruby
+workflow.fire_transition(:submit, token)
+```
+
+## Action-Rule Data Flow
+1. **Actions with Anonymous Results**
 ```ruby
 flow :draft >> :pending_review, :submit do
   actions do
-    # Execute action and store result with key :clarity
-    execute analyzer, :analyze_clarity, :clarity
+    # Execute action and store result in context
+    execute analyzer, :analyze_clarity
   end
   policy all: [:valid_clarity]
 end
@@ -84,11 +115,12 @@ CircuitBreaker::Rules::DSL.define do
 end
 ```
 
-3. **Data Flow Process**
-   - Actions are executed first during a transition
-   - Results are stored in an action context using the specified key
-   - Rules can access these results through the same key
-   - This enables rules to validate based on action outputs
+### Data Flow Process
+
+- Actions are executed first during a transition
+- Results are stored in an action context using the specified key
+- Rules can access these results through the same key
+- This enables rules to validate based on action outputs
 
 This pattern allows for:
 - Clean separation between action execution and rule validation
@@ -96,49 +128,7 @@ This pattern allows for:
 - Complex rule chains based on multiple action results
 - Clear data flow tracking during transitions
 
-### Creating a Workflow
-
-```ruby
-# Define rules
-rules = CircuitBreaker::Rules::DSL.define do
-  rule :valid_reviewer do |token|
-    token.reviewer_id.present?
-  end
-
-  rule :valid_review do |token|
-    token.reviewer_comments.present?
-  end
-end
-
-# Define workflow
-workflow = CircuitBreaker::WorkflowDSL.define(rules: rules) do
-  # Define states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
-
-  # Define transitions with rules
-  flow(:draft >> :pending_review)
-    .transition(:submit)
-    .policy(rules: { all: [:valid_reviewer] })
-
-  flow(:pending_review >> :reviewed)
-    .transition(:review)
-    .policy(
-      rules: {
-        all: [:valid_review],
-        any: [:is_high_priority, :is_urgent]
-      }
-    )
-end
-
-# Create and add token
-token = CircuitBreaker::Token.new
-workflow.add_token(token)
-
-# Fire transitions
-workflow.fire_transition(:submit, token)
-```
-
-### History Tracking
+## History Tracking
 
 The workflow automatically tracks all transitions:
 
@@ -164,7 +154,7 @@ While basic Petri nets are not Turing complete, our implementation is closer to 
 
 ## Components
 
-### 1. Workflow Engine
+### Workflow Engine
 
 The workflow engine provides:
 - State management
@@ -180,17 +170,16 @@ rule :has_reviewer,
      desc: "Document must have a reviewer assigned",
      &requires(:reviewer_id)
 
-# Define validations
-validator :title,
-         desc: "Document title is required",
-         &must_be_present(:title)
+rule :title,
+     desc: "Document title is required",
+     &must_be_present(:title)
 
 # Create workflow instance
 workflow = DocumentWorkflow.new(document)
 workflow.submit  # Transition to pending_review
 ```
 
-### 2. AI Executors
+### AI Executors
 
 Two main executor types:
 
@@ -206,7 +195,7 @@ Two main executor types:
    - Planning capabilities
    - Progress tracking
 
-### 3. Tool Framework
+### Tool Framework
 
 Tools can be:
 - Basic tools with direct execution
@@ -250,10 +239,8 @@ See the `examples` directory for complete examples:
    - Summary generation
    - Citation management
 
-## Configuration
-
-### 1. LLM Providers
-
+## LLM Providers
+### LLM Configuration
 ```ruby
 # Configure Ollama
 CircuitBreaker.configure do |config|
@@ -268,7 +255,7 @@ CircuitBreaker.configure do |config|
 end
 ```
 
-### 2. Memory Settings
+### Memory Settings
 
 ```ruby
 CircuitBreaker.configure do |config|
@@ -277,7 +264,7 @@ CircuitBreaker.configure do |config|
 end
 ```
 
-### 3. Tool Settings
+### Tool Settings
 
 ```ruby
 CircuitBreaker.configure do |config|
