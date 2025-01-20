@@ -24,8 +24,8 @@ import { NodeDetails } from './components/NodeDetails';
 import { EdgeDetails } from './components/EdgeDetails';
 import { ResizablePanel } from './components/ResizablePanel';
 import { useKeyPress } from './hooks/useKeyPress';
-import { saveWorkflow } from './utils/saveWorkflow';
-import { initialNodes, initialEdges, defaultViewport } from './config/flowConfig';
+import { saveWorkflowToServer } from './services/api';
+import { initialNodes, initialEdges, defaultViewport, generateFlowConfig } from './config/flowConfig';
 import { nodeTypes, edgeTypes, defaultEdgeOptions } from './config/memoizedTypes';
 import React from 'react';
 import { StateProvider } from './state/StateContext';
@@ -126,6 +126,32 @@ function App() {
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [workflowPath, setWorkflowPath] = useState<string>('/config/document_workflow.yaml');
+
+  useEffect(() => {
+    // Get workflow path from URL parameters or use default from config directory
+    const params = new URLSearchParams(window.location.search);
+    const path = params.get('workflow');
+    if (path) {
+      // If path doesn't start with /config/, add it
+      const fullPath = path.startsWith('/config/') ? path : `/config/${path}`;
+      setWorkflowPath(fullPath);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Load workflow when path changes
+    if (workflowPath) {
+      console.log('Loading workflow from:', workflowPath);
+      generateFlowConfig(workflowPath).then(({ nodes: newNodes, edges: newEdges }) => {
+        console.log('Loaded workflow with nodes:', newNodes.length, 'edges:', newEdges.length);
+        setNodes(newNodes);
+        setEdges(newEdges);
+      }).catch(error => {
+        console.error('Error loading workflow:', error);
+      });
+    }
+  }, [workflowPath]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -159,8 +185,22 @@ function App() {
   }, []);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!workflowPath) return false;
     try {
-      const success = await saveWorkflow(nodes, edges);
+      const success = await saveWorkflowToServer(workflowPath, {
+        object_type: 'document',
+        places: {
+          states: nodes.map(node => node.id.replace(/_/g, ' ')),
+        },
+        transitions: {
+          regular: edges.map(edge => ({
+            name: edge.label || '',
+            from: edge.source.replace(/_/g, ' '),
+            to: edge.target.replace(/_/g, ' '),
+            requires: edge.data?.requirements || [],
+          })),
+        },
+      });
       if (success) {
         console.log('Workflow saved successfully');
       } else {
@@ -171,33 +211,14 @@ function App() {
       console.error('Error saving workflow:', error);
       return false;
     }
-  }, [nodes, edges]);
-
-  const onNodeChange = useCallback((changes: NodeChange[]) => {
-    setNodes(nds => {
-      const newNodes = nds.map(node => {
-        const change = changes.find(c => c.id === node.id);
-        if (change && change.type === 'update') {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              ...change.data
-            }
-          };
-        }
-        return node;
-      });
-      return newNodes;
-    });
-  }, []);
+  }, [nodes, edges, workflowPath]);
 
   return (
     <StateProvider>
       <ReactFlowProvider>
-        <div className="h-screen flex">
-          <div className="flex-grow relative">
-            <Flow 
+        <div className="flex h-screen">
+          <div className="flex-grow">
+            <Flow
               onNodeSelect={setSelectedNode}
               onEdgeSelect={setSelectedEdge}
               nodes={nodes}
@@ -212,7 +233,7 @@ function App() {
             <div className="flex-grow overflow-y-auto">
               {selectedNode && <NodeDetails 
                 node={selectedNode} 
-                onChange={onNodeChange}
+                onChange={onNodesChange}
                 onSave={handleSave}
               />}
               {selectedEdge && <EdgeDetails 

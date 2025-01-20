@@ -1,41 +1,39 @@
 ---
-object_type: Document
+object_type: document
 places:
   states:
     - draft
-    - pending_review
+    - pending review
     - reviewed
     - approved
     - rejected
 transitions:
   regular:
-    - name: submit
+    - name: Submit
       from: draft
-      to: pending_review
+      to: pending review
       requires:
         - valid_word_count
         - valid_clarity
         - valid_completeness
-    - name: review
-      from: pending_review
+    - name: Review
+      from: pending review
       to: reviewed
       requires:
         - valid_review_metrics
         - is_high_priority_or_urgent
-    - name: approve
+    - name: Approve
       from: reviewed
       to: approved
       requires:
         - valid_approver
         - approved_status
-    - name: reject
+    - name: Reject
       from: reviewed
       to: rejected
       requires:
         - has_rejection_reasons
-    - name: revise
+    - name: Revise
       from: rejected
       to: draft
       requires: []
-metadata:
-  rules: []

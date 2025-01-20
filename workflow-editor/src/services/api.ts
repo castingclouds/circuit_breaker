@@ -2,6 +2,17 @@ import { Node, Edge } from 'reactflow';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
+// Helper to resolve workflow path
+const resolveWorkflowPath = (path: string): string => {
+  // Clean the path to just the filename if it's in the config directory
+  const cleanPath = path.replace(/^\/?(config\/)?/, '');
+  console.log('Resolved workflow path:', {
+    original: path,
+    cleaned: cleanPath
+  });
+  return cleanPath;
+};
+
 interface WorkflowData {
   object_type: string;
   places: {
@@ -30,10 +41,12 @@ interface WorkflowData {
   };
 }
 
-export const saveWorkflowToServer = async (workflowData: WorkflowData): Promise<boolean> => {
+export const saveWorkflowToServer = async (workflowPath: string, workflowData: WorkflowData): Promise<boolean> => {
   try {
+    const resolvedPath = resolveWorkflowPath(workflowPath);
     console.log('Making request to save workflow:', {
       url: `${API_BASE_URL}/api/workflow`,
+      path: resolvedPath,
       data: workflowData
     });
 
@@ -42,34 +55,43 @@ export const saveWorkflowToServer = async (workflowData: WorkflowData): Promise<
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(workflowData),
+      body: JSON.stringify({
+        path: resolvedPath,
+        data: workflowData
+      }),
     });
 
     console.log('Server response status:', response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Server error response:', errorText);
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.error('Error saving workflow:', errorText);
+      return false;
     }
 
-    const result = await response.json();
-    console.log('Server response:', result);
-    return result.success;
+    return true;
   } catch (error) {
-    console.error('Error in saveWorkflowToServer:', error);
-    throw error;
+    console.error('Error saving workflow:', error);
+    return false;
   }
 };
 
-export const loadWorkflowFromServer = async (): Promise<WorkflowData> => {
+export const loadWorkflowFromServer = async (workflowPath: string): Promise<WorkflowData> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/workflow`);
+    const resolvedPath = resolveWorkflowPath(workflowPath);
+    const url = `${API_BASE_URL}/api/workflow?path=${encodeURIComponent(resolvedPath)}`;
+    console.log('Loading workflow from:', url);
+    
+    const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Error loading workflow:', errorText);
+      throw new Error(`Failed to load workflow: ${response.statusText}`);
     }
-
-    return await response.json();
+    
+    const data = await response.json();
+    console.log('Loaded workflow data:', data);
+    return data;
   } catch (error) {
     console.error('Error loading workflow:', error);
     throw error;

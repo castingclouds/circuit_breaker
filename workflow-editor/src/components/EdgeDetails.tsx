@@ -27,7 +27,11 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
     
     const updatedEdge = {
       ...edge,
-      label: newLabel
+      label: newLabel,
+      data: {
+        ...edge.data,
+        requirements: requirements
+      }
     };
     onChange(updatedEdge);
   };
@@ -66,101 +70,108 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   };
 
   const handleSave = async () => {
+    if (!edge) return;
+    
     setIsSaving(true);
-    setSaveMessage('');
+    setSaveMessage('Saving...');
+    
     try {
       const success = await onSave();
       if (success) {
-        setSaveMessage('Changes saved successfully!');
-        setTimeout(() => setSaveMessage(''), 3000);
+        setSaveMessage('Saved successfully!');
+        setTimeout(() => setSaveMessage(''), 2000);
+      } else {
+        setSaveMessage('Failed to save');
       }
     } catch (error) {
-      setSaveMessage('Error saving changes');
+      setSaveMessage('Error saving');
+      console.error('Error saving edge:', error);
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
-  if (!edge) {
-    return (
-      <div className="p-6 text-center text-gray-500">
-        <p className="text-sm">Select a transition to view details</p>
-      </div>
-    );
-  }
+  if (!edge) return null;
 
-  const sourceNode = nodes.find(n => n.id === edge.source);
-  const targetNode = nodes.find(n => n.id === edge.target);
+  const sourceNode = nodes.find(node => node.id === edge.source);
+  const targetNode = nodes.find(node => node.id === edge.target);
 
   return (
-    <Card className="p-4">
-      <h5 className="text-xl font-bold mb-4">Transition Details</h5>
-      
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          From
-        </label>
-        <div className="text-gray-900">{sourceNode?.data?.label || edge.source}</div>
-      </div>
+    <Card className="m-4">
+      <h5 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+        Edge Details
+      </h5>
+      <div className="space-y-4">
+        <div>
+          <p className="text-sm text-gray-500">From: {sourceNode?.data?.label || edge.source}</p>
+          <p className="text-sm text-gray-500">To: {targetNode?.data?.label || edge.target}</p>
+        </div>
 
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          To
-        </label>
-        <div className="text-gray-900">{targetNode?.data?.label || edge.target}</div>
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Label
-        </label>
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => handleLabelChange(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Requirements
-        </label>
-        <div className="flex gap-2 mb-2">
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Label
+          </label>
           <input
             type="text"
-            value={newRequirement}
-            onChange={(e) => setNewRequirement(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddRequirement()}
-            placeholder="Add requirement"
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            value={label}
+            onChange={(e) => handleLabelChange(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            placeholder="Enter edge label"
           />
-          <button
-            onClick={handleAddRequirement}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-          >
-            Add
-          </button>
         </div>
-        <ul className="space-y-2">
-          {requirements.map((req, index) => (
-            <li key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded">
-              <span>{req}</span>
-              <button
-                onClick={() => handleRemoveRequirement(index)}
-                className="text-red-500 hover:text-red-600"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
 
-      {saveMessage && (
-        <div className={`text-sm ${saveMessage.includes('Error') ? 'text-red-500' : 'text-green-500'}`}>
-          {saveMessage}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Requirements
+          </label>
+          <div className="mt-2 space-y-2">
+            {requirements.map((req, index) => (
+              <div key={index} className="flex items-center space-x-2">
+                <span className="text-sm">{req}</span>
+                <button
+                  onClick={() => handleRemoveRequirement(index)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex space-x-2">
+            <input
+              type="text"
+              value={newRequirement}
+              onChange={(e) => setNewRequirement(e.target.value)}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              placeholder="Add requirement"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddRequirement();
+                }
+              }}
+            />
+            <button
+              onClick={handleAddRequirement}
+              className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+              Add
+            </button>
+          </div>
         </div>
-      )}
+
+        <div className="flex justify-between items-center">
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+          {saveMessage && (
+            <span className="text-sm text-gray-500">{saveMessage}</span>
+          )}
+        </div>
+      </div>
     </Card>
   );
 };
