@@ -223,6 +223,36 @@ class ChainableTool < CircuitBreaker::Executors::LLM::ChainableTool
 end
 ```
 
+## CLI Tools
+
+### Workflow Converter
+
+The Circuit Breaker CLI provides a tool to convert between Ruby DSL workflow files and YAML format. This is particularly useful when working with the workflow editor UI.
+
+#### Converting Ruby DSL to YAML
+```bash
+./cli/workflow_converter.rb -d path/to/workflow.rb -o path/to/output.yaml
+```
+
+#### Converting YAML to Ruby DSL
+```bash
+./cli/workflow_converter.rb -y path/to/workflow.yaml -o path/to/output.rb
+```
+
+#### Example
+Convert a document workflow from Ruby DSL to YAML:
+```bash
+./cli/workflow_converter.rb -d examples/document/document_workflow.rb -o workflow-editor/src/config/document_workflow.yaml
+```
+
+The converter preserves:
+- States and transitions
+- Requirements (policy rules)
+- Actions with their executor, method, and result
+- Object type and metadata
+
+This allows seamless conversion between the Ruby DSL format used in your application code and the YAML format used by the workflow editor UI.
+
 ## Examples
 
 See the `examples` directory for complete examples:

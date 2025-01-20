@@ -21,7 +21,8 @@ transitions:
       to: reviewed
       requires:
         - valid_review_metrics
-        - is_high_priority_or_urgent
+        - is_high_priority
+        - is_urgent
     - name: Approve
       from: reviewed
       to: approved
@@ -33,7 +34,7 @@ transitions:
       to: rejected
       requires:
         - has_rejection_reasons
-    - name: Revise
+    - name: Revisor
       from: rejected
       to: draft
       requires: []

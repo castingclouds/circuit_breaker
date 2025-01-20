@@ -10,7 +10,8 @@ A visual editor for creating and modifying workflow configurations using React F
 - Details panel for editing node and edge properties
 - YAML configuration file integration
 - Smooth edges with directional arrows
-- Auto-save functionality
+- Support for multiple workflow configurations
+- Real-time UI updates
 
 ## Getting Started
 
@@ -24,83 +25,87 @@ npm install
 npm start
 ```
 
-This will start both the Vite development server and the backend server for handling workflow saves.
+This will start both the Vite development server and the backend server for handling workflow files.
 
 ## Usage Guide
 
-### Adding New Nodes
+### Loading Different Workflows
 
-1. Click the "Add Node" button in the top-left corner
-2. A new node will be created with a default name
-3. Select the node to edit its properties in the details panel
-4. The node will be automatically positioned in the graph
+1. By default, the editor loads `/config/document_workflow.yaml`
+2. To load a different workflow, use the URL parameter:
+   ```
+   http://localhost:3000?workflow=change_workflow.yaml
+   ```
+3. You can also use the full path:
+   ```
+   http://localhost:3000?workflow=/config/change_workflow.yaml
+   ```
 
-### Creating Transitions
+### Editing the Workflow
 
-1. Hover over a node to see the connection handle
-2. Click and drag from one node to another to create a transition
-3. The transition will be created with a default name
-4. Select the transition to edit its properties
+#### States and Transitions
+- States are represented as nodes in the graph
+- Transitions are represented as edges connecting the states
+- The layout is automatically arranged for optimal visualization
 
-### Editing Properties
+#### Edge (Transition) Details
+When a transition is selected, the details panel shows:
+- Transition name (editable)
+- Source and target states
+- Requirements list
+  - Add new requirements by typing and pressing Enter
+  - Remove requirements by clicking the × button
+- Changes are reflected immediately in the UI
+- Click Save to persist changes to the YAML file
 
-#### Node Details
-- When a node is selected, the details panel shows:
-  - Node label (editable)
-  - Node type (regular or special)
-  - Node description
-  - Connected transitions
+### Configuration Files
 
-#### Edge Details
-- When a transition is selected, the details panel shows:
-  - Transition name (editable)
-  - Source and target states
-  - Requirements list (can be added/removed)
+The editor works with YAML files in the `src/config` directory. Each workflow file follows this structure:
+```yaml
+object_type: string
+places:
+  states:
+    - state1
+    - state2
+  special_states:
+    - special_state1
+transitions:
+  regular:
+    - name: transition_name
+      from: state1
+      to: state2
+      requires:
+        - requirement1
+        - requirement2
+```
 
-### Saving Changes
+### Key Files
 
-The workflow is automatically saved when:
-- A new node is added
-- A transition is created or modified
-- Node or edge properties are updated
-
-The save process:
-1. Converts the visual graph to YAML format
-2. Saves to `src/config/workflow.yaml`
-3. Updates the graph to reflect any changes
-
-## Configuration Files
-
-### workflow.yaml
-- Located in `src/config/workflow.yaml`
-- Contains the workflow configuration in YAML format
-- Structure:
-  ```yaml
-  object_type: Issue
-  places:
-    states: [...]
-    special_states: [...]
-  transitions:
-    regular: [...]
-  ```
-
-### flowConfig.ts
-- Located in `src/config/flowConfig.ts`
-- Defines visual styles for nodes and edges
-- Configures graph layout settings
+- `src/config/*.yaml`: Workflow configuration files
+- `src/App.tsx`: Main application component
+- `src/components/EdgeDetails.tsx`: Edge property editor
+- `src/server/saveWorkflow.ts`: Server for handling file operations
+- `src/services/api.ts`: API client for server communication
+- `src/config/flowConfig.ts`: Graph visualization configuration
 
 ## Development
 
-### Key Components
+### Architecture
 
-- `App.tsx`: Main application component
-- `Flow.tsx`: React Flow configuration and event handlers
-- `EdgeDetails.tsx`: Edge property editor
-- `NodeDetails.tsx`: Node property editor
-- `saveWorkflow.ts`: Workflow save functionality
+- Frontend: React + Vite + TypeScript
+- UI Components: React Flow + Flowbite React
+- Backend: Express server for file operations
+- Configuration: YAML for workflow definitions
+
+### Server API
+
+The server provides two endpoints:
+- `GET /api/workflow?path=workflow.yaml`: Load a workflow configuration
+- `POST /api/workflow`: Save workflow changes
 
 ### State Management
 
-- Node positions and connections are managed by React Flow
-- Node and edge data is synchronized with the YAML configuration
-- Real-time updates are handled through React state and callbacks
+- React Flow manages the graph state
+- React's useState and useCallback for component state
+- Real-time UI updates through component props
+- File persistence through the server API
