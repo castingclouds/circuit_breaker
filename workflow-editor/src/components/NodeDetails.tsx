@@ -99,7 +99,7 @@ export const NodeDetails = ({ node, onChange, onSave }: NodeDetailsProps) => {
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+              className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded disabled:opacity-50 transition-colors duration-200 ease-in-out shadow-lg hover:shadow-xl"
             >
               {isSaving ? 'Saving...' : 'Save Details'}
             </button>

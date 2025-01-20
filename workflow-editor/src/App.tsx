@@ -99,9 +99,13 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
         onNodeClick={(_, node) => {
           setSelectedNodeId(node.id);
           setSelectedNode(node);
+          setSelectedEdge(null); // Clear edge selection when node is clicked
           onNodeSelect(node);
         }}
         onEdgeClick={(_, edge) => {
+          setSelectedNode(null); // Clear node selection when edge is clicked
+          setSelectedNodeId(null);
+          onNodeSelect(null);
           onEdgeSelect(edge);
         }}
         fitView

@@ -1,5 +1,4 @@
 import { Edge, useNodes } from 'reactflow';
-import { Card } from 'flowbite-react';
 import { useState, useEffect } from 'react';
 
 interface Action {
@@ -44,6 +43,11 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
       }
     };
     onChange(updatedEdge);
+  };
+
+  const handleEdgeClick = () => {
+    if (!edge) return;
+    onChange(edge);
   };
 
   const handleAddRequirement = () => {
@@ -144,133 +148,136 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const targetNode = nodes.find(node => node.id === edge.target);
 
   return (
-    <Card className="m-4">
-      <h5 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
-        Edge Details
-      </h5>
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm text-gray-500">From: {sourceNode?.data?.label || edge.source}</p>
-          <p className="text-sm text-gray-500">To: {targetNode?.data?.label || edge.target}</p>
-        </div>
+    <div className="p-6 space-y-4">
+      <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-bold text-gray-900 m-0">
+          {label || 'Transition'}
+        </h3>
+        <p className="text-sm text-gray-600 mt-1 mb-0">
+          From {sourceNode?.data?.label || edge.source} to {targetNode?.data?.label || edge.target}
+        </p>
+      </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Label
-          </label>
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => handleLabelChange(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            placeholder="Enter edge label"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Requirements
-          </label>
-          <div className="mt-2 space-y-2">
-            {requirements.map((req, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <span className="text-sm">{req}</span>
-                <button
-                  onClick={() => handleRemoveRequirement(index)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex space-x-2">
+      <div className="shadow-sm">
+        <div className="space-y-6">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Name</h4>
             <input
               type="text"
-              value={newRequirement}
-              onChange={(e) => setNewRequirement(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              placeholder="Add requirement"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleAddRequirement();
-                }
-              }}
+              value={label}
+              onChange={(e) => handleLabelChange(e.target.value)}
+              className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter transition name"
             />
-            <button
-              onClick={handleAddRequirement}
-              className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Add
-            </button>
           </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Actions
-          </label>
-          <div className="mt-2 space-y-2">
-            {actions.map((action, index) => (
-              <div key={index} className="flex items-center space-x-2 bg-gray-50 p-2 rounded">
-                <span className="text-sm">
-                  execute {action.executor}.{action.method} → {action.result}
-                </span>
-                <button
-                  onClick={() => handleRemoveAction(index)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 space-y-2">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={newAction.executor}
-                onChange={(e) => setNewAction({ ...newAction, executor: e.target.value })}
-                className="block w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                placeholder="Executor"
-              />
-              <input
-                type="text"
-                value={newAction.method}
-                onChange={(e) => setNewAction({ ...newAction, method: e.target.value })}
-                className="block w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                placeholder="Method"
-              />
-              <input
-                type="text"
-                value={newAction.result}
-                onChange={(e) => setNewAction({ ...newAction, result: e.target.value })}
-                className="block w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                placeholder="Result"
-              />
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Requirements</h4>
+            <div className="space-y-2">
+              {requirements.map((req, index) => (
+                <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
+                  <span className="text-sm text-gray-900">{req}</span>
+                  <button
+                    onClick={() => handleRemoveRequirement(index)}
+                    className="text-red-500 hover:text-red-700 focus:outline-none"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
             </div>
-            <button
-              onClick={handleAddAction}
-              className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Add Action
-            </button>
+            <div className="mt-2 flex space-x-2">
+              <input
+                type="text"
+                value={newRequirement}
+                onChange={(e) => setNewRequirement(e.target.value)}
+                className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Add requirement"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddRequirement();
+                  }
+                }}
+              />
+              <button
+                onClick={handleAddRequirement}
+                className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded transition-colors duration-200 ease-in-out"
+              >
+                Add
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="flex justify-between items-center">
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-          {saveMessage && (
-            <span className="text-sm text-gray-500">{saveMessage}</span>
-          )}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Actions</h4>
+            <div className="space-y-2">
+              {actions.map((action, index) => (
+                <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
+                  <span className="text-sm text-gray-900">
+                    {action.executor}.{action.method} → {action.result}
+                  </span>
+                  <button
+                    onClick={() => handleRemoveAction(index)}
+                    className="text-red-500 hover:text-red-700 focus:outline-none"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 space-y-2">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newAction.executor}
+                  onChange={(e) => setNewAction({ ...newAction, executor: e.target.value })}
+                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Executor"
+                />
+                <input
+                  type="text"
+                  value={newAction.method}
+                  onChange={(e) => setNewAction({ ...newAction, method: e.target.value })}
+                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Method"
+                />
+                <input
+                  type="text"
+                  value={newAction.result}
+                  onChange={(e) => setNewAction({ ...newAction, result: e.target.value })}
+                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Result"
+                />
+              </div>
+              <button
+                onClick={handleAddAction}
+                className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded transition-colors duration-200 ease-in-out"
+              >
+                Add Action
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-4">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded disabled:opacity-50 transition-colors duration-200 ease-in-out shadow-lg hover:shadow-xl"
+            >
+              {isSaving ? 'Saving...' : 'Save Details'}
+            </button>
+            {saveMessage && (
+              <span className={`text-sm ${saveMessage.includes('Error') || saveMessage.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
+                {saveMessage}
+              </span>
+            )}
+          </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
