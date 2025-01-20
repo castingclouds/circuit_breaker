@@ -25,18 +25,27 @@ export function SaveButton({ onSave }: SaveButtonProps) {
   };
 
   return (
-    <div className="absolute top-4 right-4 z-50">
+    <div className="flex flex-col items-end gap-2">
       <button
         onClick={handleSave}
         disabled={saving}
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+        className={`
+          px-4 py-2 rounded-lg text-sm font-medium
+          ${saving 
+            ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+            : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+          }
+          transition-colors duration-200 ease-in-out
+          shadow-lg hover:shadow-xl
+        `}
       >
         {saving ? 'Saving...' : 'Save Workflow'}
       </button>
       {message && (
-        <div className={`mt-2 p-2 rounded text-sm ${
-          message.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-        }`}>
+        <div className={`
+          text-sm px-3 py-1 rounded-md
+          ${message.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
+        `}>
           {message}
         </div>
       )}

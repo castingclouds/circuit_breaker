@@ -1,0 +1,58 @@
+object_type: Document
+places:
+  states:
+    - draft            # Initial state when document is created
+    - pending_review   # Document submitted and awaiting review
+    - reviewed        # Document has been reviewed with comments
+    - approved        # Document has been approved by approver
+    - rejected        # Document was rejected and needs revision
+transitions:
+  regular:
+    - name: submit
+      from: draft
+      to: pending_review
+      requires:
+        - valid_word_count
+        - valid_clarity
+        - valid_completeness
+    - name: review
+      from: pending_review
+      to: reviewed
+      requires:
+        - valid_review_metrics
+        - is_high_priority_or_urgent  # Combined requirement for any: [is_high_priority, is_urgent]
+    - name: approve
+      from: reviewed
+      to: approved
+      requires:
+        - valid_approver
+        - approved_status
+    - name: reject
+      from: reviewed
+      to: rejected
+      requires:
+        - has_rejection_reasons
+    - name: revise
+      from: rejected
+      to: draft
+      requires: []  # No requirements for this transition
+
+# Additional metadata for the workflow
+metadata:
+  rules:
+    - id: valid_word_count
+      description: "Document must have at least 50 words"
+    - id: valid_clarity
+      description: "Document clarity score must be at least 70"
+    - id: valid_completeness
+      description: "Document completeness score must be at least 80"
+    - id: valid_review_metrics
+      description: "Review must meet minimum word count, clarity, and completeness metrics"
+    - id: is_high_priority_or_urgent
+      description: "Document must be marked as high priority or urgent"
+    - id: valid_approver
+      description: "Approver must be authorized to approve documents"
+    - id: approved_status
+      description: "Document must have APPROVED status from final review"
+    - id: has_rejection_reasons
+      description: "Rejection must include explanation reasons"
