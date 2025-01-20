@@ -1,5 +1,6 @@
 import { Edge, Node, MarkerType } from 'reactflow';
 import CustomNode from '../components/nodes/CustomNode';
+import CustomEdge from '../components/edges/CustomEdge';
 import { WORKFLOW_FILE } from './constants';
 import workflowConfig from './document_workflow.yaml';
 import dagre from 'dagre';
@@ -59,40 +60,47 @@ export const nodeTypes = {
   custom: CustomNode,
 };
 
+// Edge types
+export const edgeTypes = {
+  custom: CustomEdge,
+};
+
 // Default edge options
 export const defaultEdgeOptions = {
-  type: 'smoothstep',
+  type: 'custom',
+  animated: false,
+  style: {
+    stroke: '#000000',
+    strokeWidth: 1,
+    radius: 20,
+  },
   markerEnd: {
     type: MarkerType.ArrowClosed,
-    width: 20,
-    height: 20,
-    color: '#b1b1b7'
+    width: 16,
+    height: 16,
+    color: '#000000',
   },
-  style: {
-    stroke: '#b1b1b7',
-    strokeWidth: 2,
-  }
 };
 
 // Default edge options for new connections
-export const defaultEdgeOptionsForNewConnections = {
-  type: 'smoothstep',
+export const newEdgeOptions = {
+  type: 'custom',
   style: {
-    stroke: '#b1b1b7',
-    strokeWidth: 2,
+    stroke: '#000000',
+    strokeWidth: 1,
+    radius: 20,
   },
   markerEnd: {
     type: MarkerType.ArrowClosed,
-    width: 20,
-    height: 20,
-    color: '#b1b1b7'
-  }
+    width: 16,
+    height: 16,
+    color: '#000000',
+  },
 };
 
 // Default styles
 export const nodeStyles = {
-  padding: 10,
-  borderRadius: 8,
+
   border: '1px solid #ddd',
   backgroundColor: '#fff',
   width: 150,
@@ -112,8 +120,27 @@ export const selectedNodeStyles = {
 
 // Edge styles
 export const edgeStyles = {
-  stroke: '#b1b1b7',
-  strokeWidth: 2,
+  stroke: '#000000',
+  strokeWidth: 1,
+  radius: 20,
+  labelStyle: {
+    fontSize: 14,
+    fill: '#000000',
+    fontWeight: 500,
+  },
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 16,
+    height: 16,
+    color: '#000000',
+  },
+};
+
+// Node spacing configuration
+export const nodeSpacing = {
+  rankdir: 'TB',
+  nodesep: 100,
+  ranksep: 150,
 };
 
 // Helper function to capitalize and format state names
@@ -145,23 +172,19 @@ const edges: Edge[] = allTransitions.map((transition, index) => ({
   source: transition.from.replace(/\s+/g, '_'),
   target: transition.to.replace(/\s+/g, '_'),
   label: formatLabel(transition.name),
-  type: 'smoothstep',
+  type: 'custom',
   style: edgeStyles,
-  labelStyle: edgeStyles.labelStyle,
   data: {
     requirements: transition.requires || []
   },
-  markerEnd: {
-    type: MarkerType.ArrowClosed
-  }
 }));
 
 // Create a new dagre graph
 const g = new dagre.graphlib.Graph();
 g.setGraph({ 
-  rankdir: 'TB',
-  nodesep: 100,
-  ranksep: 150
+  rankdir: nodeSpacing.rankdir,
+  nodesep: nodeSpacing.nodesep,
+  ranksep: nodeSpacing.ranksep
 });
 g.setDefaultEdgeLabel(() => ({}));
 

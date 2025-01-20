@@ -1,58 +1,40 @@
+---
 object_type: Issue
 places:
   states:
-    - backlog
-    - sprint_planning
-    - assign_issue
-    - in_progress
-    - in_review
-    - testing
-    - done
-  special_states:
-    - blocked
+    - draft
+    - pending_review
+    - reviewed
+    - approved
+    - rejected
+  special_states: []
 transitions:
   regular:
-    - name: move_to_sprint
-      from: backlog
-      to: sprint_planning
+    - name: transition
+      from: draft
+      to: pending_review
       requires:
-        - description
-        - priority
-    - name: plan_issue
-      from: sprint_planning
-      to: assign_issue
+        - valid_word_count
+        - valid_clarity
+        - valid_completeness
+    - name: transition
+      from: pending_review
+      to: reviewed
       requires:
-        - story_points
-        - sprint
-    - name: start_coding
-      from: assign_issue
-      to: in_progress
+        - valid_review_metrics
+        - is_high_priority_or_urgent
+    - name: transition
+      from: reviewed
+      to: approved
       requires:
-        - assignee
-    - name: submit_for_review
-      from: in_progress
-      to: in_review
+        - valid_approver
+        - approved_status
+    - name: transition
+      from: reviewed
+      to: rejected
       requires:
-        - pull_request_url
-    - name: approve_review
-      from: in_review
-      to: testing
-      requires:
-        - review_approvals
-        - test_coverage
-    - name: pass_testing
-      from: testing
-      to: done
-      requires:
-        - qa_approved
-        - deployment_approved
-    - name: reject_review
-      from: in_review
-      to: in_progress
-      requires:
-        - review_comments
-    - name: fail_testing
-      from: testing
-      to: in_progress
-      requires:
-        - test_failure_reason
+        - has_rejection_reasons
+    - name: transition
+      from: rejected
+      to: draft
+      requires: []

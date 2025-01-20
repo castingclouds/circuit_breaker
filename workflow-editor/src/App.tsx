@@ -25,7 +25,7 @@ import { EdgeDetails } from './components/EdgeDetails';
 import { ResizablePanel } from './components/ResizablePanel';
 import { useKeyPress } from './hooks/useKeyPress';
 import { saveWorkflow } from './utils/saveWorkflow';
-import { initialNodes, initialEdges, nodeStyles, edgeStyles, selectedNodeStyles, defaultViewport, nodeTypes, defaultEdgeOptions } from './config/flowConfig';
+import { initialNodes, initialEdges, nodeStyles, edgeStyles, selectedNodeStyles, defaultViewport, nodeTypes, edgeTypes, defaultEdgeOptions } from './config/flowConfig';
 import React from 'react';
 import { StateProvider } from './state/StateContext';
 import { DebugToggle } from './components/debug/DebugToggle';
@@ -90,6 +90,7 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
         fitView
         defaultViewport={defaultViewport}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
       >
         <div className="absolute top-4 right-4 z-10">

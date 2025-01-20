@@ -8,27 +8,133 @@
   font-weight: 400;
   color-scheme: light;
   background-color: #f8fafc;
+  --primary-color: #3b82f6;
+  --primary-hover: #2563eb;
+  --secondary-color: #64748b;
+  --border-color: #e2e8f0;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  color: #1e293b;
 }
 
-.react-flow__node {
-  font-family: Inter, system-ui, -apple-system, sans-serif;
-}
-
-.react-flow__controls {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+/* Node styles */
+.react-flow__node-custom {
   border-radius: 8px;
-  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background-color: white;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
 }
 
-.react-flow__controls button {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  color: #4b5563;
-  padding: 4px;
+.react-flow__node-custom.selected,
+.react-flow__node-custom.selected:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.react-flow__node-custom .node-content {
+  padding: 8px;
+}
+
+.react-flow__node-custom .node-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a202c;
+}
+
+.react-flow__node-custom .node-description {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* Handle styles */
+.react-flow__handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: #000000 !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 50% !important;
+}
+
+.react-flow__handle-connecting {
+  background: #3b82f6 !important;
+}
+
+.react-flow__handle-valid {
+  background: #10b981 !important;
+}
+
+/* Edge styles */
+.react-flow__edge {
+  pointer-events: all;
+}
+
+.react-flow__edge-path {
+  stroke: #000000;
+  stroke-width: 1;
+  transition: all 0.2s ease;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge.selected:hover .react-flow__edge-path {
+  stroke: #3b82f6;
+  stroke-width: 2;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #3b82f6;
+  stroke-width: 1;
+}
+
+.react-flow__arrowhead {
+  fill: #000000;
+  stroke: none;
+  transition: all 0.2s ease;
+}
+
+.react-flow__edge.selected .react-flow__arrowhead,
+.react-flow__edge.selected:hover .react-flow__arrowhead,
+.react-flow__edge:hover .react-flow__arrowhead {
+  fill: #3b82f6;
+}
+
+/* Edge label styles */
+.edge-label {
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  transition: all 0.2s ease;
+}
+
+.edge-label.selected {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+/* Modern scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
