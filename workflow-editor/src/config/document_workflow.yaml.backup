@@ -2,15 +2,15 @@
 object_type: Document
 places:
   states:
-    - draftie
+    - draft
     - pending_review
     - reviewed
     - approved
     - rejected
 transitions:
   regular:
-    - name: submit
-      from: draftie
+    - name: submiter
+      from: draft
       to: pending_review
       requires:
         - valid_word_count
@@ -35,7 +35,7 @@ transitions:
         - has_rejection_reasons
     - name: revise
       from: rejected
-      to: draftie
+      to: draft
       requires: []
 metadata:
   rules: []

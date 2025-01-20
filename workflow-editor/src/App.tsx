@@ -137,9 +137,9 @@ function App() {
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       setEdges((eds) => applyEdgeChanges(changes, eds));
-      // If this is an update to the selected edge, update the selected edge state
-      const updateChange = changes.find(change => change.type === 'select' || change.type === 'remove');
-      if (updateChange?.type === 'remove') {
+      // Handle removal
+      const removeChange = changes.find(change => change.type === 'remove');
+      if (removeChange?.type === 'remove') {
         setSelectedEdge(null);
       }
     },
@@ -147,15 +147,16 @@ function App() {
   );
 
   const onEdgeChange = useCallback((updatedEdge: Edge) => {
-    // Create a change object that ReactFlow understands
-    const change: EdgeChange = {
-      id: updatedEdge.id,
-      type: 'update',
-      item: updatedEdge,
-    };
-    onEdgesChange([change]);
+    setEdges((eds) => {
+      return eds.map((ed) => {
+        if (ed.id === updatedEdge.id) {
+          return updatedEdge;
+        }
+        return ed;
+      });
+    });
     setSelectedEdge(updatedEdge);
-  }, [onEdgesChange]);
+  }, []);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     try {

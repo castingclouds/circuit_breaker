@@ -16,46 +16,30 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
-  // Update label and requirements state when edge changes
   useEffect(() => {
     setLabel(edge?.label || '');
     setRequirements(edge?.data?.requirements || []);
   }, [edge]);
 
-  if (!edge) {
-    return (
-      <div className="p-6 text-center text-gray-500">
-        <p className="text-sm">Select a transition to view details</p>
-      </div>
-    );
-  }
-
-  const sourceNode = nodes.find(n => n.id === edge.source);
-  const targetNode = nodes.find(n => n.id === edge.target);
-
   const handleLabelChange = (newLabel: string) => {
-    setLabel(newLabel);
     if (!edge) return;
+    setLabel(newLabel);
     
-    const updatedEdge: Edge = {
+    const updatedEdge = {
       ...edge,
-      label: newLabel,
-      data: {
-        ...edge.data,
-        label: newLabel
-      }
+      label: newLabel
     };
     onChange(updatedEdge);
   };
 
   const handleAddRequirement = () => {
     if (!newRequirement.trim() || !edge) return;
-    
+
     const updatedRequirements = [...requirements, newRequirement.trim()];
     setRequirements(updatedRequirements);
     setNewRequirement('');
-    
-    const updatedEdge: Edge = {
+
+    const updatedEdge = {
       ...edge,
       data: {
         ...edge.data,
@@ -67,11 +51,11 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
 
   const handleRemoveRequirement = (index: number) => {
     if (!edge) return;
-    
+
     const updatedRequirements = requirements.filter((_, i) => i !== index);
     setRequirements(updatedRequirements);
-    
-    const updatedEdge: Edge = {
+
+    const updatedEdge = {
       ...edge,
       data: {
         ...edge.data,
@@ -95,6 +79,17 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
     }
     setIsSaving(false);
   };
+
+  if (!edge) {
+    return (
+      <div className="p-6 text-center text-gray-500">
+        <p className="text-sm">Select a transition to view details</p>
+      </div>
+    );
+  }
+
+  const sourceNode = nodes.find(n => n.id === edge.source);
+  const targetNode = nodes.find(n => n.id === edge.target);
 
   return (
     <Card className="p-4">
