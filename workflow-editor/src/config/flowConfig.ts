@@ -1,6 +1,4 @@
 import { Edge, Node, MarkerType } from 'reactflow';
-import CustomNode from '../components/nodes/CustomNode';
-import CustomEdge from '../components/edges/CustomEdge';
 import { WORKFLOW_FILE } from './constants';
 import workflowConfig from './document_workflow.yaml';
 import dagre from 'dagre';
@@ -55,110 +53,77 @@ interface EdgeStyle {
   };
 }
 
-// Node types
-export const nodeTypes = {
-  custom: CustomNode,
-};
-
-// Edge types
-export const edgeTypes = {
-  custom: CustomEdge,
-};
-
-// Default edge options
-export const defaultEdgeOptions = {
-  type: 'custom',
-  animated: false,
-  style: {
-    stroke: '#000000',
-    strokeWidth: 1,
-    radius: 20,
-  },
-  markerEnd: {
-    type: MarkerType.ArrowClosed,
-    width: 16,
-    height: 16,
-    color: '#000000',
-  },
-};
-
-// Default edge options for new connections
-export const newEdgeOptions = {
-  type: 'custom',
-  style: {
-    stroke: '#000000',
-    strokeWidth: 1,
-    radius: 20,
-  },
-  markerEnd: {
-    type: MarkerType.ArrowClosed,
-    width: 16,
-    height: 16,
-    color: '#000000',
-  },
-};
-
 // Default styles
-export const nodeStyles = {
-
+export const nodeStyles: NodeStyle = {
+  padding: 10,
+  borderRadius: 5,
   border: '1px solid #ddd',
-  backgroundColor: '#fff',
-  width: 150,
-  fontSize: 14,
-  color: '#333',
+  backgroundColor: '#ffffff',
+  width: 180,
+  fontSize: 12,
+  color: '#222',
   fontWeight: 500,
-  transition: '0.2s',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+  transition: 'all 0.2s ease',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
 };
 
-// Selected node styles
-export const selectedNodeStyles = {
+export const selectedNodeStyles: NodeStyle = {
   ...nodeStyles,
-  border: '2px solid #3b82f6',
-  boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.5)'
+  border: '2px solid #1a192b',
+  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
 };
 
-// Edge styles
-export const edgeStyles = {
-  stroke: '#000000',
+export const edgeStyles: EdgeStyle = {
+  stroke: '#222',
   strokeWidth: 1,
-  radius: 20,
+  labelBgPadding: [8, 4],
+  labelBgStyle: {
+    fill: '#fff',
+    stroke: '#ddd',
+    strokeWidth: 1,
+    borderRadius: 4,
+  },
   labelStyle: {
-    fontSize: 14,
-    fill: '#000000',
+    fontSize: 12,
+    fill: '#222',
     fontWeight: 500,
   },
+  selected: {
+    stroke: '#1a192b',
+    strokeWidth: 2,
+    markerEnd: {
+      type: 'arrowclosed',
+      width: 16,
+      height: 16,
+      color: '#1a192b',
+    },
+  },
   markerEnd: {
-    type: MarkerType.ArrowClosed,
+    type: 'arrowclosed',
     width: 16,
     height: 16,
-    color: '#000000',
+    color: '#222',
   },
-};
-
-// Node spacing configuration
-export const nodeSpacing = {
-  rankdir: 'TB',
-  nodesep: 100,
-  ranksep: 150,
 };
 
 // Helper function to capitalize and format state names
-const formatLabel = (state: string) => {
-  return state.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-};
+function formatLabel(state: string) {
+  return state
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 // Generate nodes from states
 const states = [...(config.places.states || []), ...(config.places.special_states || [])];
 const nodes: Node[] = states.map((state, index) => ({
   id: state.replace(/\s+/g, '_'), // Replace all whitespace with underscores
   type: 'custom',
-  position: { x: 0, y: index * 100 }, // Give initial positions before dagre layout
-  data: { 
+  position: { x: 0, y: index * 100 }, // Initial positions will be adjusted by dagre
+  data: {
     label: formatLabel(state),
-    description: `${formatLabel(state)} state`
+    description: '', // You can add descriptions from your config if available
   },
-  style: nodeStyles
 }));
 
 // Generate edges from transitions
@@ -173,7 +138,6 @@ const edges: Edge[] = allTransitions.map((transition, index) => ({
   target: transition.to.replace(/\s+/g, '_'),
   label: formatLabel(transition.name),
   type: 'custom',
-  style: edgeStyles,
   data: {
     requirements: transition.requires || []
   },
@@ -182,9 +146,9 @@ const edges: Edge[] = allTransitions.map((transition, index) => ({
 // Create a new dagre graph
 const g = new dagre.graphlib.Graph();
 g.setGraph({ 
-  rankdir: nodeSpacing.rankdir,
-  nodesep: nodeSpacing.nodesep,
-  ranksep: nodeSpacing.ranksep
+  rankdir: 'TB',
+  nodesep: 100,
+  ranksep: 150
 });
 g.setDefaultEdgeLabel(() => ({}));
 

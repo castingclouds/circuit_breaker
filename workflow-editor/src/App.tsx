@@ -25,7 +25,8 @@ import { EdgeDetails } from './components/EdgeDetails';
 import { ResizablePanel } from './components/ResizablePanel';
 import { useKeyPress } from './hooks/useKeyPress';
 import { saveWorkflow } from './utils/saveWorkflow';
-import { initialNodes, initialEdges, nodeStyles, edgeStyles, selectedNodeStyles, defaultViewport, nodeTypes, edgeTypes, defaultEdgeOptions } from './config/flowConfig';
+import { initialNodes, initialEdges, defaultViewport } from './config/flowConfig';
+import { nodeTypes, edgeTypes, defaultEdgeOptions } from './config/memoizedTypes';
 import React from 'react';
 import { StateProvider } from './state/StateContext';
 import { DebugToggle } from './components/debug/DebugToggle';
@@ -64,21 +65,27 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
-        ...params,
-        id: `reactflow__edge-${params.source}-${params.target}`,
-        label: 'New Transition',
-        style: edgeStyles,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 16,
-          height: 16,
-          color: '#000000'
-        }
-      };
-      onEdgesChange([addEdge(newEdge)]);
+      onEdgesChange([
+        addEdge(
+          {
+            ...params,
+            type: 'custom',
+            style: {
+              stroke: '#000000',
+              strokeWidth: 2,
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 16,
+              height: 16,
+              color: '#000000',
+            },
+          },
+          edges
+        ),
+      ]);
     },
-    [onEdgesChange]
+    [edges, onEdgesChange]
   );
 
   return (
