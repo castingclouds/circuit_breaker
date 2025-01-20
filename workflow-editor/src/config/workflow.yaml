@@ -10,31 +10,31 @@ places:
   special_states: []
 transitions:
   regular:
-    - name: transition
+    - name: submit
       from: draft
       to: pending_review
       requires:
         - valid_word_count
         - valid_clarity
         - valid_completeness
-    - name: transition
+    - name: review
       from: pending_review
       to: reviewed
       requires:
         - valid_review_metrics
         - is_high_priority_or_urgent
-    - name: transition
+    - name: approve
       from: reviewed
       to: approved
       requires:
         - valid_approver
         - approved_status
-    - name: transition
+    - name: reject
       from: reviewed
       to: rejected
       requires:
         - has_rejection_reasons
-    - name: transition
+    - name: revise
       from: rejected
       to: draft
       requires: []

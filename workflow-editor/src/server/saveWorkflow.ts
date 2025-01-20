@@ -16,7 +16,7 @@ app.use(cors());
 const PORT = 3001;
 
 // Get current workflow
-app.get('/api/get-workflow', async (req, res) => {
+app.get('/api/workflow', async (req, res) => {
   try {
     const filePath = path.resolve(__dirname, '../../', WORKFLOW_PATH);
     const yamlContent = fs.readFileSync(filePath, 'utf8');
@@ -32,9 +32,9 @@ app.get('/api/get-workflow', async (req, res) => {
   }
 });
 
-app.post('/api/save-workflow', async (req, res) => {
+app.post('/api/workflow', async (req, res) => {
   try {
-    console.log('Received save workflow request');
+    console.log('Received save workflow request with data:', JSON.stringify(req.body, null, 2));
     
     if (!req.body) {
       console.error('No workflow data provided');
@@ -42,6 +42,7 @@ app.post('/api/save-workflow', async (req, res) => {
     }
 
     const workflowData = req.body;
+    console.log('Processing workflow data...');
     
     // Convert the workflow data to YAML
     const yamlContent = dump(workflowData, {
@@ -49,11 +50,23 @@ app.post('/api/save-workflow', async (req, res) => {
       lineWidth: -1, // Don't wrap lines
       noRefs: true,  // Don't use aliases
     });
+    console.log('Generated YAML content:', yamlContent);
 
     // Add YAML header and save
     const fullContent = YAML_HEADER + yamlContent;
     const filePath = path.resolve(__dirname, '../../', WORKFLOW_PATH);
+    console.log('Saving to file:', filePath);
+    
+    // Create a backup of the current file
+    if (fs.existsSync(filePath)) {
+      const backupPath = `${filePath}.backup`;
+      fs.copyFileSync(filePath, backupPath);
+      console.log('Created backup at:', backupPath);
+    }
+    
+    // Save the new content
     fs.writeFileSync(filePath, fullContent, 'utf8');
+    console.log('Successfully wrote file');
 
     console.log('Workflow saved successfully');
     res.json({ success: true, message: 'Workflow saved successfully' });

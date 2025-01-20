@@ -38,6 +38,7 @@ export const NodeDetails = ({ node, onChange, onSave }: NodeDetailsProps) => {
 
     onChange([{
       id: node.id,
+      type: 'update',
       data: {
         ...node.data,
         [field]: value

@@ -37,7 +37,7 @@ interface FlowProps {
   edges: Edge[];
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
-  onSave: () => Promise<void>;
+  onSave: () => Promise<boolean>;
 }
 
 function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdgesChange, onSave }: FlowProps) {
@@ -46,6 +46,17 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const { fitView } = useReactFlow();
+
+  // Update selected node when nodes change
+  useEffect(() => {
+    if (selectedNodeId) {
+      const updatedNode = nodes.find(n => n.id === selectedNodeId);
+      if (updatedNode && JSON.stringify(updatedNode) !== JSON.stringify(selectedNode)) {
+        setSelectedNode(updatedNode);
+        onNodeSelect(updatedNode);
+      }
+    }
+  }, [nodes, selectedNodeId, selectedNode, onNodeSelect]);
 
   useEffect(() => {
     fitView({ duration: 200 });
@@ -56,14 +67,13 @@ function Flow({ onNodeSelect, onEdgeSelect, nodes, edges, onNodesChange, onEdges
       const newEdge = {
         ...params,
         id: `reactflow__edge-${params.source}-${params.target}`,
-        data: { label: 'New Transition' },
-        startLabel: 'New Transition',
+        label: 'New Transition',
         style: edgeStyles,
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          width: 20,
-          height: 20,
-          color: '#b1b1b7'
+          width: 16,
+          height: 16,
+          color: '#000000'
         }
       };
       onEdgesChange([addEdge(newEdge)]);
@@ -120,29 +130,58 @@ function App() {
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       setEdges((eds) => applyEdgeChanges(changes, eds));
+      // If this is an update to the selected edge, update the selected edge state
+      const updateChange = changes.find(change => change.type === 'select' || change.type === 'remove');
+      if (updateChange?.type === 'remove') {
+        setSelectedEdge(null);
+      }
     },
     []
   );
 
-  const handleSave = useCallback(async () => {
+  const onEdgeChange = useCallback((updatedEdge: Edge) => {
+    // Create a change object that ReactFlow understands
+    const change: EdgeChange = {
+      id: updatedEdge.id,
+      type: 'update',
+      item: updatedEdge,
+    };
+    onEdgesChange([change]);
+    setSelectedEdge(updatedEdge);
+  }, [onEdgesChange]);
+
+  const handleSave = useCallback(async (): Promise<boolean> => {
     try {
-      await saveWorkflow(nodes, edges);
-      console.log('Workflow saved successfully');
+      const success = await saveWorkflow(nodes, edges);
+      if (success) {
+        console.log('Workflow saved successfully');
+      } else {
+        console.error('Failed to save workflow');
+      }
+      return success;
     } catch (error) {
       console.error('Error saving workflow:', error);
+      return false;
     }
   }, [nodes, edges]);
 
-  const onNodeChange = useCallback((updatedNode: Node) => {
-    setNodes(nds => nds.map(node => 
-      node.id === updatedNode.id ? updatedNode : node
-    ));
-  }, []);
-
-  const onEdgeChange = useCallback((updatedEdge: Edge) => {
-    setEdges(eds => eds.map(edge => 
-      edge.id === updatedEdge.id ? updatedEdge : edge
-    ));
+  const onNodeChange = useCallback((changes: NodeChange[]) => {
+    setNodes(nds => {
+      const newNodes = nds.map(node => {
+        const change = changes.find(c => c.id === node.id);
+        if (change && change.type === 'update') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...change.data
+            }
+          };
+        }
+        return node;
+      });
+      return newNodes;
+    });
   }, []);
 
   return (
