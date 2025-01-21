@@ -149,11 +149,12 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-bold text-gray-900 m-0">
-          {label || 'Transition'}
+            <div className="bg-gray-100 p-4 rounded-lg border border-gray-400">
+        <h5 className="text-xs uppercase tracking-wide font-semibold text-gray-500 m-0">TRANSITION</h5>
+        <h3 className="text-2xl font-bold text-gray-900 m-0">
+          {label}
         </h3>
-        <p className="text-sm text-gray-600 mt-1 mb-0">
+        <p className="text-xs text-gray-500 mt-1 mb-0">
           From {sourceNode?.data?.label || edge.source} to {targetNode?.data?.label || edge.target}
         </p>
       </div>

@@ -133,13 +133,11 @@ export const NodeDetails = ({ node, onChange, onSave }: NodeDetailsProps) => {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-bold text-gray-900 m-0">
+      <div className="bg-gray-100 p-4 rounded-lg border border-gray-400">
+        <h5 className="text-xs uppercase tracking-wide font-semibold text-gray-500 m-0">PLACE</h5>
+        <h3 className="text-2xl font-bold text-gray-900 m-0">
           {label}
         </h3>
-        <p className="text-sm text-gray-600 mt-1 mb-0">
-          {description}
-        </p>
       </div>
 
       <Card className="shadow-sm">
@@ -153,65 +151,6 @@ export const NodeDetails = ({ node, onChange, onSave }: NodeDetailsProps) => {
               className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter node name"
             />
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
-            <textarea
-              value={description}
-              onChange={(e) => handleChange('description', e.target.value)}
-              className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter node description"
-              rows={3}
-            />
-          </div>
-
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Requirements</h4>
-            <div className="space-y-4">
-              {requirements.map((requirement, index) => (
-                <div key={index} className="flex flex-col space-y-2 p-2 border rounded">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">{requirement}</span>
-                    <button
-                      onClick={() => handleRemoveRequirement(requirement)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <textarea
-                    value={requirementDescriptions[requirement] || ''}
-                    onChange={(e) => handleUpdateRequirementDescription(requirement, e.target.value)}
-                    className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter requirement description"
-                    rows={2}
-                  />
-                </div>
-              ))}
-              <div className="flex flex-col space-y-2">
-                <input
-                  type="text"
-                  value={newRequirement}
-                  onChange={(e) => setNewRequirement(e.target.value)}
-                  className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="New requirement name"
-                />
-                <textarea
-                  value={newRequirementDescription}
-                  onChange={(e) => setNewRequirementDescription(e.target.value)}
-                  className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="New requirement description"
-                  rows={2}
-                />
-                <button
-                  onClick={handleAddRequirement}
-                  disabled={!newRequirement.trim()}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-                >
-                  Add Requirement
-                </button>
-              </div>
-            </div>
           </div>
 
           <div className="flex items-center justify-between pt-4">
