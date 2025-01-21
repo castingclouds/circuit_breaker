@@ -2,9 +2,11 @@ import { Edge, useNodes } from 'reactflow';
 import { useState, useEffect } from 'react';
 
 interface Action {
-  executor: string;
-  method: string;
-  result: string;
+  executor: {
+    name: string;
+    method: string;
+    result: string;
+  }[];
 }
 
 interface EdgeDetailsProps {
@@ -19,7 +21,11 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const [requirements, setRequirements] = useState<string[]>(edge?.data?.requirements || []);
   const [actions, setActions] = useState<Action[]>(edge?.data?.actions || []);
   const [newRequirement, setNewRequirement] = useState('');
-  const [newAction, setNewAction] = useState<Action>({ executor: '', method: '', result: '' });
+  const [newAction, setNewAction] = useState({
+    name: '',
+    method: '',
+    result: ''
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -43,11 +49,6 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
       }
     };
     onChange(updatedEdge);
-  };
-
-  const handleEdgeClick = () => {
-    if (!edge) return;
-    onChange(edge);
   };
 
   const handleAddRequirement = () => {
@@ -86,11 +87,17 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   };
 
   const handleAddAction = () => {
-    if (!newAction.executor.trim() || !newAction.method.trim() || !newAction.result.trim() || !edge) return;
+    if (!newAction.name.trim() || !newAction.method.trim() || !newAction.result.trim() || !edge) return;
 
-    const updatedActions = [...actions, { ...newAction }];
+    const updatedActions = [...actions, {
+      executor: [{
+        name: newAction.name.trim(),
+        method: newAction.method.trim(),
+        result: newAction.result.trim()
+      }]
+    }];
     setActions(updatedActions);
-    setNewAction({ executor: '', method: '', result: '' });
+    setNewAction({ name: '', method: '', result: '' });
 
     const updatedEdge = {
       ...edge,
@@ -149,13 +156,13 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
 
   return (
     <div className="p-6 space-y-4">
-            <div className="bg-gray-100 p-4 rounded-lg border border-gray-400">
+      <div className="bg-gray-100 p-4 rounded-lg border border-gray-400">
         <h5 className="text-xs uppercase tracking-wide font-semibold text-gray-500 m-0">TRANSITION</h5>
         <h3 className="text-2xl font-bold text-gray-900 m-0">
           {label}
         </h3>
-        <p className="text-xs text-gray-500 mt-1 mb-0">
-          From {sourceNode?.data?.label || edge.source} to {targetNode?.data?.label || edge.target}
+        <p className="text-sm text-gray-600 mt-1">
+          {sourceNode?.data?.label} → {targetNode?.data?.label}
         </p>
       </div>
 
@@ -214,14 +221,19 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
           <div>
             <h4 className="text-sm font-semibold text-gray-900 mb-2">Actions</h4>
             <div className="space-y-2">
-              {actions.map((action, index) => (
+              {actions.map((actionItem, index) => (
                 <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
-                  <span className="text-sm text-gray-900">
-                    {action.executor}.{action.method} → {action.result}
-                  </span>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-900">
+                      {actionItem.executor[0].name}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {actionItem.executor[0].method} → {actionItem.executor[0].result}
+                    </div>
+                  </div>
                   <button
                     onClick={() => handleRemoveAction(index)}
-                    className="text-red-500 hover:text-red-700 focus:outline-none"
+                    className="text-red-500 hover:text-red-700 focus:outline-none ml-4"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -231,39 +243,40 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
               ))}
             </div>
             <div className="mt-2 space-y-2">
-              <div className="flex space-x-2">
+              <div className="grid grid-cols-3 gap-2">
                 <input
                   type="text"
-                  value={newAction.executor}
-                  onChange={(e) => setNewAction({ ...newAction, executor: e.target.value })}
-                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Executor"
+                  value={newAction.name}
+                  onChange={(e) => setNewAction({ ...newAction, name: e.target.value })}
+                  className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Name (e.g. analyze_document)"
                 />
                 <input
                   type="text"
                   value={newAction.method}
                   onChange={(e) => setNewAction({ ...newAction, method: e.target.value })}
-                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Method"
+                  className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Method (e.g. get_word_count)"
                 />
                 <input
                   type="text"
                   value={newAction.result}
                   onChange={(e) => setNewAction({ ...newAction, result: e.target.value })}
-                  className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Result"
+                  className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Result (e.g. word_count)"
                 />
               </div>
               <button
                 onClick={handleAddAction}
-                className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded transition-colors duration-200 ease-in-out"
+                disabled={!newAction.name || !newAction.method || !newAction.result}
+                className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded transition-colors duration-200 ease-in-out disabled:opacity-50"
               >
                 Add Action
               </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4">
+          <div className="flex items-center space-x-4">
             <button
               onClick={handleSave}
               disabled={isSaving}

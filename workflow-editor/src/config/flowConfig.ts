@@ -137,7 +137,8 @@ export const generateFlowConfig = async (workflowPath: string) => {
     label: formatLabel(transition.name),
     type: 'custom',
     data: {
-      requirements: transition.requires || []
+      requirements: transition.requires || [],
+      actions: transition.actions || []
     },
   }));
 

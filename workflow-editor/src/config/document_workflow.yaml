@@ -12,6 +12,19 @@ transitions:
     - name: Submit
       from: Draft
       to: Pending Review
+      actions:
+        - executor: 
+          - name: analyze_document
+            method: get_word_count
+            result: word_count
+        - executor: 
+          - name: analyze_document
+            method: get_clarity
+            result: clarity
+        - executor: 
+          - name: analyze_document
+            method: get_completeness
+            result: completeness
       requires:
         - valid_word_count
         - valid_clarity
