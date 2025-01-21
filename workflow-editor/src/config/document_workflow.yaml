@@ -12,10 +12,11 @@ transitions:
     - name: Submit
       from: Draft
       to: Pending Review
-      requires:
-        - valid_word_count
-        - valid_clarity
-        - valid_completeness
+      policy:
+        all:
+          - valid_word_count
+          - valid_clarity
+          - valid_completeness
       actions:
         - executor:
             - name: analyze_document
@@ -32,28 +33,32 @@ transitions:
     - name: Review
       from: Pending Review
       to: Reviewed
-      requires:
-        - valid_review_metrics
-        - is_high_priority
-        - is_urgent
+      policy:
+        all:
+          - valid_review_metrics
+        any:
+          - is_high_priority
+          - is_urgent
       actions: []
     - name: Approve
       from: Reviewed
       to: Approved
-      requires:
-        - valid_approver
-        - approved_status
+      policy:
+        all:
+          - valid_approver
+          - approved_status
       actions: []
     - name: Reject
       from: Reviewed
       to: Rejected
-      requires:
-        - has_rejection_reasons
+      policy:
+        all:
+          - has_rejection_reasons
       actions: []
     - name: Revise
       from: Rejected
       to: Draft
-      requires: []
+      policy: {}
       actions: []
 metadata:
   rules: []

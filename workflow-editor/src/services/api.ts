@@ -13,6 +13,11 @@ const resolveWorkflowPath = (path: string): string => {
   return cleanPath;
 };
 
+interface Policy {
+  all?: string[];
+  any?: string[];
+}
+
 interface WorkflowData {
   object_type: string;
   places: {
@@ -25,12 +30,16 @@ interface WorkflowData {
       from: string;
       to: string;
       requires?: string[];
+      policy?: Policy;
+      actions?: any[];
     }[];
     special?: {
       name: string;
       from: string;
       to: string;
       requires?: string[];
+      policy?: Policy;
+      actions?: any[];
     }[];
   };
   metadata?: {
