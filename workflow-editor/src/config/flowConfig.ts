@@ -49,6 +49,11 @@ interface EdgeStyle {
   };
 }
 
+interface Policy {
+  all?: string[];
+  any?: string[];
+}
+
 // Default styles
 export const nodeStyles: NodeStyle = {
   padding: 10,
@@ -130,17 +135,27 @@ export const generateFlowConfig = async (workflowPath: string) => {
     ...(config.transitions.special || [])
   ];
 
-  const edges: Edge[] = allTransitions.map((transition, index) => ({
-    id: `e${index}`,
-    source: transition.from.replace(/\s+/g, '_'),
-    target: transition.to.replace(/\s+/g, '_'),
-    label: formatLabel(transition.name),
-    type: 'custom',
-    data: {
-      requirements: transition.requires || [],
-      actions: transition.actions || []
-    },
-  }));
+  const edges: Edge[] = allTransitions.map((transition, index) => {
+    // Convert old requires format to new policy format if needed
+    let policy: Policy = transition.policy || {};
+    if (transition.requires && !transition.policy) {
+      policy = {
+        all: transition.requires
+      };
+    }
+
+    return {
+      id: `e${index}`,
+      source: transition.from.replace(/\s+/g, '_'),
+      target: transition.to.replace(/\s+/g, '_'),
+      label: formatLabel(transition.name),
+      type: 'custom',
+      data: {
+        policy,
+        actions: transition.actions || []
+      },
+    };
+  });
 
   // Create a new dagre graph
   const g = new dagre.graphlib.Graph();

@@ -9,6 +9,11 @@ interface Action {
   }[];
 }
 
+interface Policy {
+  all?: string[];
+  any?: string[];
+}
+
 interface EdgeDetailsProps {
   edge: Edge | null;
   onChange: (edge: Edge) => void;
@@ -18,9 +23,10 @@ interface EdgeDetailsProps {
 export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const nodes = useNodes();
   const [label, setLabel] = useState(edge?.label || '');
-  const [requirements, setRequirements] = useState<string[]>(edge?.data?.requirements || []);
+  const [policy, setPolicy] = useState<Policy>(edge?.data?.policy || {});
   const [actions, setActions] = useState<Action[]>(edge?.data?.actions || []);
   const [newRequirement, setNewRequirement] = useState('');
+  const [requirementType, setRequirementType] = useState<'all' | 'any'>('all');
   const [newAction, setNewAction] = useState({
     name: '',
     method: '',
@@ -31,7 +37,7 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
 
   useEffect(() => {
     setLabel(edge?.label || '');
-    setRequirements(edge?.data?.requirements || []);
+    setPolicy(edge?.data?.policy || {});
     setActions(edge?.data?.actions || []);
   }, [edge]);
 
@@ -44,7 +50,7 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
       label: newLabel,
       data: {
         ...edge.data,
-        requirements,
+        policy,
         actions
       }
     };
@@ -54,32 +60,38 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
   const handleAddRequirement = () => {
     if (!newRequirement.trim() || !edge) return;
 
-    const updatedRequirements = [...requirements, newRequirement.trim()];
-    setRequirements(updatedRequirements);
+    const updatedPolicy = {
+      ...policy,
+      [requirementType]: [...(policy[requirementType] || []), newRequirement.trim()]
+    };
+    setPolicy(updatedPolicy);
     setNewRequirement('');
 
     const updatedEdge = {
       ...edge,
       data: {
         ...edge.data,
-        requirements: updatedRequirements,
+        policy: updatedPolicy,
         actions
       }
     };
     onChange(updatedEdge);
   };
 
-  const handleRemoveRequirement = (index: number) => {
+  const handleRemoveRequirement = (type: 'all' | 'any', index: number) => {
     if (!edge) return;
 
-    const updatedRequirements = requirements.filter((_, i) => i !== index);
-    setRequirements(updatedRequirements);
+    const updatedPolicy = {
+      ...policy,
+      [type]: policy[type]?.filter((_, i) => i !== index)
+    };
+    setPolicy(updatedPolicy);
 
     const updatedEdge = {
       ...edge,
       data: {
         ...edge.data,
-        requirements: updatedRequirements,
+        policy: updatedPolicy,
         actions
       }
     };
@@ -103,7 +115,7 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
       ...edge,
       data: {
         ...edge.data,
-        requirements,
+        policy,
         actions: updatedActions
       }
     };
@@ -120,7 +132,7 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
       ...edge,
       data: {
         ...edge.data,
-        requirements,
+        policy,
         actions: updatedActions
       }
     };
@@ -180,38 +192,68 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Requirements</h4>
-            <div className="space-y-2">
-              {requirements.map((req, index) => (
-                <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
-                  <span className="text-sm text-gray-900">{req}</span>
-                  <button
-                    onClick={() => handleRemoveRequirement(index)}
-                    className="text-red-500 hover:text-red-700 focus:outline-none"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Policy Requirements</h4>
+            
+            {/* All Requirements */}
+            <div className="mb-4">
+              <h5 className="text-sm font-medium text-gray-700 mb-2">All Requirements</h5>
+              <div className="space-y-2">
+                {policy.all?.map((req, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
+                    <span className="text-sm text-gray-900">{req}</span>
+                    <button
+                      onClick={() => handleRemoveRequirement('all', index)}
+                      className="text-red-500 hover:text-red-700 focus:outline-none"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* Any Requirements */}
+            <div className="mb-4">
+              <h5 className="text-sm font-medium text-gray-700 mb-2">Any Requirements</h5>
+              <div className="space-y-2">
+                {policy.any?.map((req, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
+                    <span className="text-sm text-gray-900">{req}</span>
+                    <button
+                      onClick={() => handleRemoveRequirement('any', index)}
+                      className="text-red-500 hover:text-red-700 focus:outline-none"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Add New Requirement */}
             <div className="mt-2 flex space-x-2">
+              <select
+                value={requirementType}
+                onChange={(e) => setRequirementType(e.target.value as 'all' | 'any')}
+                className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All</option>
+                <option value="any">Any</option>
+              </select>
               <input
                 type="text"
                 value={newRequirement}
                 onChange={(e) => setNewRequirement(e.target.value)}
                 className="flex-1 p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Add requirement"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddRequirement();
-                  }
-                }}
+                placeholder="Enter requirement"
               />
               <button
                 onClick={handleAddRequirement}
-                className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded transition-colors duration-200 ease-in-out"
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 Add
               </button>
@@ -221,19 +263,17 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
           <div>
             <h4 className="text-sm font-semibold text-gray-900 mb-2">Actions</h4>
             <div className="space-y-2">
-              {actions.map((actionItem, index) => (
+              {actions.map((action, index) => (
                 <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-900">
-                      {actionItem.executor[0].name}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {actionItem.executor[0].method} → {actionItem.executor[0].result}
-                    </div>
+                    <p className="text-sm font-medium text-gray-900">{action.executor[0].name}</p>
+                    <p className="text-xs text-gray-500">
+                      Method: {action.executor[0].method}, Result: {action.executor[0].result}
+                    </p>
                   </div>
                   <button
                     onClick={() => handleRemoveAction(index)}
-                    className="text-red-500 hover:text-red-700 focus:outline-none ml-4"
+                    className="text-red-500 hover:text-red-700 focus:outline-none ml-2"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -243,54 +283,51 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
               ))}
             </div>
             <div className="mt-2 space-y-2">
-              <div className="grid grid-cols-3 gap-2">
-                <input
-                  type="text"
-                  value={newAction.name}
-                  onChange={(e) => setNewAction({ ...newAction, name: e.target.value })}
-                  className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Name (e.g. analyze_document)"
-                />
-                <input
-                  type="text"
-                  value={newAction.method}
-                  onChange={(e) => setNewAction({ ...newAction, method: e.target.value })}
-                  className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Method (e.g. get_word_count)"
-                />
-                <input
-                  type="text"
-                  value={newAction.result}
-                  onChange={(e) => setNewAction({ ...newAction, result: e.target.value })}
-                  className="p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Result (e.g. word_count)"
-                />
-              </div>
+              <input
+                type="text"
+                value={newAction.name}
+                onChange={(e) => setNewAction({ ...newAction, name: e.target.value })}
+                className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Executor name"
+              />
+              <input
+                type="text"
+                value={newAction.method}
+                onChange={(e) => setNewAction({ ...newAction, method: e.target.value })}
+                className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Method"
+              />
+              <input
+                type="text"
+                value={newAction.result}
+                onChange={(e) => setNewAction({ ...newAction, result: e.target.value })}
+                className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Result"
+              />
               <button
                 onClick={handleAddAction}
-                disabled={!newAction.name || !newAction.method || !newAction.result}
-                className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded transition-colors duration-200 ease-in-out disabled:opacity-50"
+                className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 Add Action
               </button>
             </div>
           </div>
-
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2 px-4 rounded disabled:opacity-50 transition-colors duration-200 ease-in-out shadow-lg hover:shadow-xl"
-            >
-              {isSaving ? 'Saving...' : 'Save Details'}
-            </button>
-            {saveMessage && (
-              <span className={`text-sm ${saveMessage.includes('Error') || saveMessage.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
-                {saveMessage}
-              </span>
-            )}
-          </div>
         </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
+        >
+          {isSaving ? 'Saving...' : 'Save'}
+        </button>
+        {saveMessage && (
+          <span className={`text-sm ${saveMessage.includes('Error') || saveMessage.includes('Failed') ? 'text-red-500' : 'text-green-500'}`}>
+            {saveMessage}
+          </span>
+        )}
       </div>
     </div>
   );

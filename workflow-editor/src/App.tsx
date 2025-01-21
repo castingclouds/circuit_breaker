@@ -208,7 +208,7 @@ function App() {
             name: edge.label || '',
             from: nodes.find(n => n.id === edge.source)?.data?.label || '',
             to: nodes.find(n => n.id === edge.target)?.data?.label || '',
-            requires: edge.data?.requirements || [],
+            policy: edge.data?.policy || {},
             actions: edge.data?.actions || []
           }))
         },

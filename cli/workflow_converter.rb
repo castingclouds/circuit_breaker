@@ -6,23 +6,20 @@ require 'optparse'
 class WorkflowConverter
   class << self
     def dsl_to_yaml(dsl_content)
-      # Extract states from DSL
-      states = extract_states(dsl_content)
-      transitions = extract_transitions(dsl_content)
-
-      # Create YAML structure
-      workflow = {
-        'object_type' => extract_object_type(dsl_content),
+      yaml = {
+        'object_type' => 'document',
         'places' => {
-          'states' => states
+          'states' => extract_states(dsl_content)
         },
         'transitions' => {
-          'regular' => transitions
+          'regular' => extract_transitions(dsl_content)
+        },
+        'metadata' => {
+          'rules' => []
         }
       }
 
-      # Convert to YAML
-      YAML.dump(workflow)
+      yaml.to_yaml
     end
 
     def yaml_to_dsl(yaml_content)
@@ -31,136 +28,226 @@ class WorkflowConverter
       # Generate DSL content
       dsl = []
       dsl << "require_relative '../../lib/circuit_breaker'"
+      dsl << "require_relative 'document_token'"
+      dsl << "require_relative 'document_rules'"
+      dsl << "require_relative 'mock_executor'"
       dsl << ""
-      dsl << "# Generated workflow definition"
-      dsl << "CircuitBreaker::WorkflowBuilder::DSL.define do"
+      dsl << "# Example of a document workflow using a more declarative DSL approach"
+      dsl << "module Examples"
+      dsl << "  module Document"
+      dsl << "    module Workflow"
+      dsl << "      class DSL"
+      dsl << "        def self.run"
+      dsl << "          puts \"Starting Document Workflow Example (DSL Version)...\""
+      dsl << "          puts \"================================================\\n\""
+      dsl << ""
+      dsl << "          # Create a document token"
+      dsl << "          token = DocumentToken.new"
+      dsl << "          puts \"Initial Document State:\""
+      dsl << "          puts \"======================\""
+      dsl << "          puts \"State: \#{token.state}\\n\\n\""
+      dsl << "          puts token.to_json(true)"
+      dsl << ""
+      dsl << "          puts \"\\nWorkflow Definition:\""
+      dsl << "          puts \"===================\\n\""
+      dsl << ""
+      dsl << "          # Initialize document-specific rules and assistant"
+      dsl << "          rules = Rules.define"
+      dsl << "          mock = MockExecutor.new"
+      dsl << ""
+      dsl << "          workflow = CircuitBreaker::WorkflowBuilder::DSL.define(rules: rules) do"
       
       # Add states
       states = workflow.dig('places', 'states') || []
-      dsl << "  # Define all possible states"
-      dsl << "  states #{states.map(&:to_sym).join(', ')}"
+      dsl << "            # Define all possible document states"
+      dsl << "            # The first state listed becomes the initial state"
+      state_comments = {
+        'Draft' => 'Initial state when document is created',
+        'Pending Review' => 'Document submitted and awaiting review',
+        'Reviewed' => 'Document has been reviewed with comments',
+        'Approved' => 'Document has been approved by approver',
+        'Rejected' => 'Document was rejected and needs revision'
+      }
+      states_list = states.map { |s| 
+        name = s['name'].downcase.gsub(' ', '_')
+        comment = state_comments[s['name']] || ''
+        comment.empty? ? ":#{name}" : "#{':' + name.ljust(15)}# #{comment}"
+      }.join(",\n" + " " * 18)
+      dsl << "            states #{states_list}"
       dsl << ""
       
       # Add transitions
-      dsl << "  # Define transitions with requirements"
+      dsl << "            # Define transitions with required rules"
       transitions = workflow.dig('transitions', 'regular') || []
       transitions.each do |transition|
-        from = transition['from']
-        to = transition['to']
-        name = transition['name']
-        requires = transition['requires'] || []
+        from = transition['from'].downcase.gsub(' ', '_')
+        to = transition['to'].downcase.gsub(' ', '_')
+        name = transition['name'].downcase
+        policy = transition['policy'] || {}
         actions = transition['actions'] || []
         
-        dsl << "  flow :#{from} >> :#{to}, :#{name.downcase} do"
+        if actions.empty? && policy.empty?
+          dsl << "            # Simple transition without requirements"
+          dsl << "            flow :#{from} >> :#{to}, :#{name}"
+        else
+          dsl << "            flow :#{from} >> :#{to}, :#{name} do"
 
-        # Add actions if present
-        unless actions.empty?
-          dsl << "    actions do"
-          actions.each do |action|
-            dsl << "      execute #{action['executor']}, :#{action['method']}, :#{action['result']}"
+          # Add policy requirements if present
+          if policy['all']&.any? || policy['any']&.any?
+            dsl << "              policy"
+            if policy['all']&.any?
+              all_reqs = policy['all'].map { |r| ":#{r}" }.join(', ')
+              dsl << "                all #{all_reqs}"
+            end
+            if policy['any']&.any?
+              any_reqs = policy['any'].map { |r| ":#{r}" }.join(', ')
+              dsl << "                any #{any_reqs}"
+            end
+            dsl << "              end"
           end
-          dsl << "    end"
-        end
 
-        # Add requirements if present
-        unless requires.empty?
-          dsl << "    policy all: [#{requires.map { |r| ":#{r}" }.join(', ')}]"
+          # Add actions if present
+          actions.each do |action|
+            dsl << "              actions do"
+            action['executor'].each do |executor|
+              dsl << "                execute mock, :#{executor['method']}, :#{executor['result']}"
+            end
+            dsl << "              end"
+          end
+          dsl << "            end"
         end
-        dsl << "  end"
         dsl << ""
       end
       
+      dsl << "          end"
+      dsl << ""
+      dsl << "          puts workflow.to_json(true)"
+      dsl << "          puts \"\\nWorkflow created successfully!\""
+      dsl << "        end"
+      dsl << "      end"
+      dsl << "    end"
+      dsl << "  end"
       dsl << "end"
+      
       dsl.join("\n")
     end
 
     private
 
-    def extract_transitions(dsl_content)
-      transitions = []
-      
-      # Split content into flow blocks
-      flow_blocks = dsl_content.split(/\s*flow\s+/)
-      flow_blocks.shift  # Remove everything before first flow
-
-      flow_blocks.each do |block|
-        # Extract transition details for blocks with content
-        if block =~ /^:(\w+)\s*>>\s*:(\w+),\s*:(\w+)\s*do(.*)/m
-          from, to, name, content = $1, $2, $3, $4
-          
-          # Extract requirements
-          reqs = []
-          if content =~ /policy.*?all:\s*\[(.*?)\]/m
-            reqs += $1.scan(/:(\w+)/).flatten
-          end
-          if content =~ /any:\s*\[(.*?)\]/m
-            reqs += $1.scan(/:(\w+)/).flatten
-          end
-
-          # Extract actions
-          actions = []
-          if content =~ /actions\s+do(.*?)end/m
-            actions_block = $1
-            actions_block.scan(/execute\s+(\w+),\s*:(\w+),\s*:(\w+)/) do |executor, method, result|
-              actions << {
-                'executor' => executor,
-                'method' => method,
-                'result' => result
-              }
-            end
-          end
-
-          transition = {
-            'name' => name,
-            'from' => from,
-            'to' => to,
-            'requires' => reqs.uniq,
-            'actions' => actions
-          }
-          transitions << transition
-        # Extract simple transitions without do blocks
-        elsif block =~ /^:(\w+)\s*>>\s*:(\w+),\s*:(\w+)\s*$/
-          from, to, name = $1, $2, $3
-          transition = {
-            'name' => name,
-            'from' => from,
-            'to' => to,
-            'requires' => [],
-            'actions' => []
-          }
-          transitions << transition
-        end
-      end
-
-      transitions
+    def extract_object_type(dsl_content)
+      # For now, hardcode as 'document' since it's a document workflow
+      'document'
     end
 
     def extract_states(dsl_content)
-      # Find states line and extract state names
-      if dsl_content =~ /states\s+(.*?)(?=\s*flow)/m
-        states_line = $1
-        states = []
-        states_line.scan(/:(\w+)/) do |state|
-          state_name = state[0]
-          next if state_name =~ /^(all|any)$/  # Skip policy keywords
-          next if state_name =~ /^(submit|review|approve|reject|revise)$/  # Skip action names
-          states << state_name
+      # Extract states from the DSL content
+      states_section = dsl_content.match(/states\s+(.*?)(?=flow|\Z)/m)
+      return [] unless states_section
+
+      states = []
+      states_str = states_section[1].strip
+      
+      # Split by commas and extract state names, handling multiline
+      states_str.split(/,\s*\n*/).each do |state_str|
+        if state_str =~ /:(\w+)/
+          states << { 'name' => $1.gsub('_', ' ').capitalize }
         end
-        states
-      else
-        []
       end
+      
+      states
     end
 
-    def extract_object_type(dsl_content)
-      # Try to extract object type from comments or module name
-      if dsl_content =~ /Example of a (\w+) workflow/i
-        $1.downcase
-      elsif dsl_content =~ /module\s+(\w+)\s*$/m
-        $1.downcase
-      else
-        'workflow'
+    def extract_transitions(dsl_content)
+      transitions = []
+      current_transition = nil
+      current_policy = nil
+      current_actions = nil
+      in_policy = false
+      in_actions = false
+
+      dsl_content.each_line do |line|
+        line.strip!
+        next if line.empty? || line.start_with?('#')
+
+        # Start of a new transition
+        if match = line.match(/^\s*flow\s+:(\w+)\s*>>\s*:(\w+)\s*,\s*:(\w+)/)
+          # Save previous transition if exists
+          if current_transition
+            current_transition['policy'] = current_policy if current_policy
+            current_transition['actions'] = current_actions if current_actions
+            transitions << current_transition
+          end
+
+          # Start new transition
+          current_transition = {
+            'name' => match[3].gsub('_', ' '),
+            'from' => match[1].gsub('_', ' ').capitalize,
+            'to' => match[2].gsub('_', ' ').capitalize
+          }
+          current_policy = nil
+          current_actions = nil
+          in_policy = false
+          in_actions = false
+          next
+        end
+
+        next unless current_transition
+
+        # Policy section
+        if line =~ /^\s*policy\s*$/
+          in_policy = true
+          in_actions = false
+          current_policy = {}
+          next
+        end
+
+        # Actions section
+        if line =~ /^\s*actions\s+do\s*$/
+          in_policy = false
+          in_actions = true
+          current_actions = []
+          next
+        end
+
+        # End of policy or actions
+        if line =~ /^\s*end\s*$/
+          if in_policy
+            in_policy = false
+          elsif in_actions
+            in_actions = false
+          end
+          next
+        end
+
+        # Inside policy section
+        if in_policy
+          if match = line.match(/^\s*all\s+(.+)$/)
+            current_policy['all'] = match[1].scan(/:(\w+)/).flatten
+          elsif match = line.match(/^\s*any\s+(.+)$/)
+            current_policy['any'] = match[1].scan(/:(\w+)/).flatten
+          end
+        end
+
+        # Inside actions section
+        if in_actions && (match = line.match(/^\s*execute\s+\w+,\s*:(\w+),\s*:(\w+)/))
+          current_actions << {
+            'executor' => [{
+              'name' => 'mock',
+              'method' => match[1],
+              'result' => match[2]
+            }]
+          }
+        end
       end
+
+      # Add the last transition
+      if current_transition
+        current_transition['policy'] = current_policy if current_policy
+        current_transition['actions'] = current_actions if current_actions
+        transitions << current_transition
+      end
+
+      transitions
     end
   end
 end
@@ -170,56 +257,42 @@ if __FILE__ == $PROGRAM_NAME
   
   OptionParser.new do |opts|
     opts.banner = "Usage: workflow_converter.rb [options]"
-
-    opts.on("-d", "--dsl FILE", "Input DSL file") do |file|
+    
+    opts.on("-d", "--dsl FILE", "DSL input file") do |file|
       options[:dsl_file] = file
     end
-
-    opts.on("-y", "--yaml FILE", "Input YAML file") do |file|
+    
+    opts.on("-y", "--yaml FILE", "YAML input file") do |file|
       options[:yaml_file] = file
     end
-
+    
     opts.on("-o", "--output FILE", "Output file") do |file|
       options[:output_file] = file
     end
-
-    opts.on("-h", "--help", "Show this help message") do
-      puts opts
-      exit
-    end
   end.parse!
 
-  if options[:dsl_file] && options[:yaml_file]
-    puts "Error: Cannot specify both DSL and YAML input files"
-    exit 1
-  end
-
-  if !options[:dsl_file] && !options[:yaml_file]
-    puts "Error: Must specify either DSL or YAML input file"
-    exit 1
-  end
-
-  if !options[:output_file]
-    puts "Error: Must specify output file"
-    exit 1
-  end
-
-  begin
-    if options[:dsl_file]
-      # Convert DSL to YAML
-      dsl_content = File.read(options[:dsl_file])
-      yaml_content = WorkflowConverter.dsl_to_yaml(dsl_content)
+  if options[:dsl_file]
+    # Convert DSL to YAML
+    dsl_content = File.read(options[:dsl_file])
+    yaml_content = WorkflowConverter.dsl_to_yaml(dsl_content)
+    
+    if options[:output_file]
       File.write(options[:output_file], yaml_content)
-      puts "Successfully converted DSL to YAML: #{options[:output_file]}"
     else
-      # Convert YAML to DSL
-      yaml_content = File.read(options[:yaml_file])
-      dsl_content = WorkflowConverter.yaml_to_dsl(yaml_content)
-      File.write(options[:output_file], dsl_content)
-      puts "Successfully converted YAML to DSL: #{options[:output_file]}"
+      puts yaml_content
     end
-  rescue => e
-    puts "Error: #{e.message}"
+  elsif options[:yaml_file]
+    # Convert YAML to DSL
+    yaml_content = File.read(options[:yaml_file])
+    dsl_content = WorkflowConverter.yaml_to_dsl(yaml_content)
+    
+    if options[:output_file]
+      File.write(options[:output_file], dsl_content)
+    else
+      puts dsl_content
+    end
+  else
+    puts "Error: Must specify either --dsl or --yaml input file"
     exit 1
   end
 end
