@@ -12,23 +12,23 @@ transitions:
     - name: Submit
       from: Draft
       to: Pending Review
-      actions:
-        - executor: 
-          - name: analyze_document
-            method: get_word_count
-            result: word_count
-        - executor: 
-          - name: analyze_document
-            method: get_clarity
-            result: clarity
-        - executor: 
-          - name: analyze_document
-            method: get_completeness
-            result: completeness
       requires:
         - valid_word_count
         - valid_clarity
         - valid_completeness
+      actions:
+        - executor:
+            - name: analyze_document
+              method: get_word_count
+              result: word_count
+        - executor:
+            - name: analyze_document
+              method: get_clarity
+              result: clarity
+        - executor:
+            - name: analyze_document
+              method: get_completeness
+              result: completeness
     - name: Review
       from: Pending Review
       to: Reviewed
@@ -36,20 +36,24 @@ transitions:
         - valid_review_metrics
         - is_high_priority
         - is_urgent
+      actions: []
     - name: Approve
       from: Reviewed
       to: Approved
       requires:
         - valid_approver
         - approved_status
+      actions: []
     - name: Reject
       from: Reviewed
       to: Rejected
       requires:
         - has_rejection_reasons
-    - name: Revisor
+      actions: []
+    - name: Revise
       from: Rejected
       to: Draft
       requires: []
+      actions: []
 metadata:
   rules: []

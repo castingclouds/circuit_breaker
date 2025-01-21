@@ -167,37 +167,30 @@ function App() {
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       setEdges((eds) => applyEdgeChanges(changes, eds));
-      // Handle removal
-      const removeChange = changes.find(change => change.type === 'remove');
-      if (removeChange?.type === 'remove') {
-        setSelectedEdge(null);
-      }
     },
     []
   );
 
-  const onNodeChange = useCallback((updatedNode: Node) => {
-    setNodes((nds) => {
-      return nds.map((nd) => {
-        if (nd.id === updatedNode.id) {
-          return updatedNode;
+  const onNodeChange = useCallback((node: Node) => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === node.id) {
+          return node;
         }
-        return nd;
-      });
-    });
-    setSelectedNode(updatedNode);
+        return n;
+      })
+    );
   }, []);
 
-  const onEdgeChange = useCallback((updatedEdge: Edge) => {
-    setEdges((eds) => {
-      return eds.map((ed) => {
-        if (ed.id === updatedEdge.id) {
-          return updatedEdge;
+  const onEdgeChange = useCallback((edge: Edge) => {
+    setEdges((eds) =>
+      eds.map((e) => {
+        if (e.id === edge.id) {
+          return edge;
         }
-        return ed;
-      });
-    });
-    setSelectedEdge(updatedEdge);
+        return e;
+      })
+    );
   }, []);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
@@ -236,14 +229,24 @@ function App() {
     }
   }, [nodes, edges, workflowPath]);
 
+  const handleNodeSelect = useCallback((node: Node | null) => {
+    setSelectedNode(node);
+    setSelectedEdge(null); // Clear edge selection when node is selected
+  }, []);
+
+  const handleEdgeSelect = useCallback((edge: Edge | null) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null); // Clear node selection when edge is selected
+  }, []);
+
   return (
     <StateProvider>
       <ReactFlowProvider>
         <div className="h-screen flex">
           <div className="flex-grow relative">
             <Flow 
-              onNodeSelect={setSelectedNode}
-              onEdgeSelect={setSelectedEdge}
+              onNodeSelect={handleNodeSelect}
+              onEdgeSelect={handleEdgeSelect}
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChange}
@@ -251,18 +254,24 @@ function App() {
               onSave={handleSave}
             />
           </div>
-          <ResizablePanel>
-            {selectedNode && <NodeDetails 
-              node={selectedNode} 
-              onChange={onNodeChange}
-              onSave={handleSave}
-            />}
-            {selectedEdge && <EdgeDetails 
-              edge={selectedEdge}
-              onChange={onEdgeChange}
-              onSave={handleSave}
-            />}
-          </ResizablePanel>
+          {(selectedNode || selectedEdge) && (
+            <ResizablePanel>
+              {selectedNode && (
+                <NodeDetails 
+                  node={selectedNode} 
+                  onChange={onNodeChange}
+                  onSave={handleSave}
+                />
+              )}
+              {selectedEdge && (
+                <EdgeDetails 
+                  edge={selectedEdge}
+                  onChange={onEdgeChange}
+                  onSave={handleSave}
+                />
+              )}
+            </ResizablePanel>
+          )}
         </div>
       </ReactFlowProvider>
     </StateProvider>
