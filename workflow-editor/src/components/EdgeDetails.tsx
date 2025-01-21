@@ -266,10 +266,21 @@ export const EdgeDetails = ({ edge, onChange, onSave }: EdgeDetailsProps) => {
               {actions.map((action, index) => (
                 <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{action.executor[0].name}</p>
-                    <p className="text-xs text-gray-500">
-                      Method: {action.executor[0].method}, Result: {action.executor[0].result}
-                    </p>
+                    <p className="text-sm font-semibold text-gray-900">{action.executor[0].name}</p>
+                    
+                    <span className="text-xs uppercase text-gray-500">
+                      Method:  &nbsp;
+                    </span>
+                    <span className="text-sm font-semibold text-gray-500">
+                      {action.executor[0].method}
+                    </span>
+                    <p></p>
+                    <span className="text-xs uppercase text-gray-500">
+                      Result: &nbsp;
+                    </span>
+                    <span className="text-sm font-semibold text-gray-500">
+                      {action.executor[0].result}
+                    </span>
                   </div>
                   <button
                     onClick={() => handleRemoveAction(index)}
