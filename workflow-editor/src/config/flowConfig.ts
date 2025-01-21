@@ -110,16 +110,17 @@ export const defaultViewport = { x: 0, y: 0, zoom: 1.5 };
 // Function to generate flow config from workflow data
 export const generateFlowConfig = async (workflowPath: string) => {
   const config = await loadWorkflowFromServer(workflowPath);
+  console.log('Loaded workflow config:', config);
 
   // Generate nodes from states
   const states = [...(config.places.states || []), ...(config.places.special_states || [])];
   const nodes: Node[] = states.map((state, index) => ({
-    id: state.replace(/\s+/g, '_'), // Replace all whitespace with underscores
+    id: state.name.replace(/\s+/g, '_'),
     type: 'custom',
     position: { x: 0, y: index * 100 }, // Initial positions will be adjusted by dagre
     data: {
-      label: formatLabel(state),
-      description: '', // You can add descriptions from your config if available
+      label: state.name,
+      description: '',
     },
   }));
 
@@ -149,25 +150,24 @@ export const generateFlowConfig = async (workflowPath: string) => {
   });
   g.setDefaultEdgeLabel(() => ({}));
 
-  // Add nodes to dagre graph
-  nodes.forEach((node) => {
-    g.setNode(node.id, { width: nodeStyles.width, height: 40 });
+  // Add nodes and edges to dagre graph
+  nodes.forEach(node => {
+    g.setNode(node.id, { width: 150, height: 50 });
   });
 
-  // Add edges to dagre graph
-  edges.forEach((edge) => {
+  edges.forEach(edge => {
     g.setEdge(edge.source, edge.target);
   });
 
-  // Apply layout
+  // Calculate layout
   dagre.layout(g);
 
-  // Update node positions based on dagre layout
-  nodes.forEach((node) => {
+  // Apply layout to nodes
+  nodes.forEach(node => {
     const nodeWithPosition = g.node(node.id);
     node.position = {
-      x: nodeWithPosition.x - nodeStyles.width / 2,
-      y: nodeWithPosition.y - 20,
+      x: nodeWithPosition.x - 75, // Subtract half the width
+      y: nodeWithPosition.y - 25  // Subtract half the height
     };
   });
 

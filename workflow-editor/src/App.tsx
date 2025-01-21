@@ -176,6 +176,18 @@ function App() {
     []
   );
 
+  const onNodeChange = useCallback((updatedNode: Node) => {
+    setNodes((nds) => {
+      return nds.map((nd) => {
+        if (nd.id === updatedNode.id) {
+          return updatedNode;
+        }
+        return nd;
+      });
+    });
+    setSelectedNode(updatedNode);
+  }, []);
+
   const onEdgeChange = useCallback((updatedEdge: Edge) => {
     setEdges((eds) => {
       return eds.map((ed) => {
@@ -194,17 +206,23 @@ function App() {
       const success = await saveWorkflowToServer(workflowPath, {
         object_type: 'document',
         places: {
-          states: nodes.map(node => node.id.replace(/_/g, ' ')),
+          states: nodes.map(node => ({
+            name: node.data?.label || ''
+          }))
         },
         transitions: {
           regular: edges.map(edge => ({
             name: edge.label || '',
-            from: edge.source.replace(/_/g, ' '),
-            to: edge.target.replace(/_/g, ' '),
-            requires: edge.data?.requirements || [],
-          })),
+            from: nodes.find(n => n.id === edge.source)?.data?.label || '',
+            to: nodes.find(n => n.id === edge.target)?.data?.label || '',
+            requires: edge.data?.requirements || []
+          }))
         },
+        metadata: {
+          rules: []
+        }
       });
+
       if (success) {
         console.log('Workflow saved successfully');
       } else {
@@ -220,9 +238,9 @@ function App() {
   return (
     <StateProvider>
       <ReactFlowProvider>
-        <div className="flex h-screen">
-          <div className="flex-grow">
-            <Flow
+        <div className="h-screen flex">
+          <div className="flex-grow relative">
+            <Flow 
               onNodeSelect={setSelectedNode}
               onEdgeSelect={setSelectedEdge}
               nodes={nodes}
@@ -232,27 +250,18 @@ function App() {
               onSave={handleSave}
             />
           </div>
-
-          <div className="flex flex-col w-[400px] min-w-[350px] max-w-[800px] border-l border-gray-200 bg-white">
-            <div className="flex-grow overflow-y-auto">
-              {selectedNode && <NodeDetails 
-                node={selectedNode} 
-                onChange={onNodesChange}
-                onSave={handleSave}
-              />}
-              {selectedEdge && <EdgeDetails 
-                edge={selectedEdge} 
-                onChange={onEdgeChange} 
-                onSave={handleSave}
-              />}
-              {!selectedNode && !selectedEdge && (
-                <div className="p-6 text-center text-gray-500">
-                  <p className="text-sm">Select a node or transition to view details</p>
-                </div>
-              )}
-            </div>
-          </div>
-          <DebugToggle />
+          <ResizablePanel>
+            {selectedNode && <NodeDetails 
+              node={selectedNode} 
+              onChange={onNodeChange}
+              onSave={handleSave}
+            />}
+            {selectedEdge && <EdgeDetails 
+              edge={selectedEdge}
+              onChange={onEdgeChange}
+              onSave={handleSave}
+            />}
+          </ResizablePanel>
         </div>
       </ReactFlowProvider>
     </StateProvider>

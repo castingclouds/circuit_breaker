@@ -34,6 +34,12 @@ interface WorkflowData {
     }[];
   };
   metadata?: {
+    states?: {
+      [key: string]: {
+        label?: string;
+        description?: string;
+      };
+    };
     rules?: {
       id: string;
       description: string;
