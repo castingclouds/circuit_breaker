@@ -1,57 +1,6 @@
-import { Edge, MarkerType } from 'reactflow';
-import { WORKFLOW_FILE } from './constants';
-import workflowConfig from './workflow.yaml';
+import { Edge, Node, MarkerType } from 'reactflow';
 import dagre from 'dagre';
-
-// Load and parse the YAML file
-const config = workflowConfig;
-
-// Default styles
-const defaultNodeStyle: NodeStyle = {
-  padding: 10,
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  backgroundColor: '#fff',
-  width: 150,
-  fontSize: 14,
-  color: '#333',
-  fontWeight: 500,
-  transition: '0.2s',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-};
-
-const defaultEdgeStyle: EdgeStyle = {
-  stroke: '#b1b1b7',
-  strokeWidth: 2,
-  labelBgPadding: [8, 4],
-  labelBgStyle: {
-    fill: '#fff',
-    stroke: '#e2e2e2',
-    strokeWidth: 1,
-    borderRadius: 4
-  },
-  labelStyle: {
-    fontSize: 12,
-    fill: '#777',
-    fontWeight: 500
-  },
-  selected: {
-    stroke: '#3b82f6',
-    strokeWidth: 3,
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      width: 20,
-      height: 20,
-      color: '#3b82f6'
-    }
-  },
-  markerEnd: {
-    type: MarkerType.ArrowClosed,
-    width: 20,
-    height: 20,
-    color: '#b1b1b7'
-  }
-};
+import { loadWorkflowFromServer } from '../services/api';
 
 // Define types for our configuration
 interface NodeStyle {
@@ -100,90 +49,147 @@ interface EdgeStyle {
   };
 }
 
-// Export the styles
-export const nodeStyles = defaultNodeStyle;
-export const edgeStyles = {
-  ...defaultEdgeStyle,
-  startLabelStyle: {
-    ...defaultEdgeStyle.labelStyle,
-    distance: 10
-  }
+interface Policy {
+  all?: string[];
+  any?: string[];
+}
+
+// Default styles
+export const nodeStyles: NodeStyle = {
+  padding: 10,
+  borderRadius: 5,
+  border: '1px solid #222',
+  backgroundColor: '#ffffff',
+  width: 150,
+  fontSize: 12,
+  color: '#222',
+  fontWeight: 500,
+  transition: 'all 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms',
+  boxShadow: '0 1px 4px rgba(0, 0, 0, 0.16)',
 };
 
-// Add selected node styles
-export const selectedNodeStyles = {
-  ...nodeStyles,
-  border: '2px solid #4a9eff',
-  boxShadow: '0 4px 12px rgba(74, 158, 255, 0.2)'
+export const edgeStyles: EdgeStyle = {
+  stroke: '#222',
+  strokeWidth: 2,
+  labelBgPadding: [8, 4],
+  labelBgStyle: {
+    fill: '#fff',
+    stroke: '#222',
+    strokeWidth: 1,
+    borderRadius: 4,
+  },
+  labelStyle: {
+    fontSize: 12,
+    fill: '#222',
+    fontWeight: 500,
+  },
+  selected: {
+    stroke: '#00ff00',
+    strokeWidth: 3,
+    markerEnd: {
+      type: 'arrowclosed',
+      width: 16,
+      height: 16,
+      color: '#00ff00',
+    },
+  },
+  markerEnd: {
+    type: 'arrowclosed',
+    width: 16,
+    height: 16,
+    color: '#222',
+  },
 };
 
 // Helper function to capitalize and format state names
-const formatLabel = (state: string) => {
-  return state.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+function formatLabel(state: string) {
+  return state
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+// Default viewport
+export const defaultViewport = { x: 0, y: 0, zoom: 1.5 };
+
+// Function to generate flow config from workflow data
+export const generateFlowConfig = async (workflowPath: string) => {
+  const config = await loadWorkflowFromServer(workflowPath);
+  console.log('Loaded workflow config:', config);
+
+  // Generate nodes from states
+  const states = [...(config.places.states || []), ...(config.places.special_states || [])];
+  const nodes: Node[] = states.map((state, index) => ({
+    id: state.name.replace(/\s+/g, '_'),
+    type: 'custom',
+    position: { x: 0, y: index * 100 }, // Initial positions will be adjusted by dagre
+    data: {
+      label: state.name,
+      description: '',
+    },
+  }));
+
+  // Generate edges from transitions
+  const allTransitions = [
+    ...(config.transitions.regular || []),
+    ...(config.transitions.special || [])
+  ];
+
+  const edges: Edge[] = allTransitions.map((transition, index) => {
+    // Convert old requires format to new policy format if needed
+    let policy: Policy = transition.policy || {};
+    if (transition.requires && !transition.policy) {
+      policy = {
+        all: transition.requires
+      };
+    }
+
+    return {
+      id: `e${index}`,
+      source: transition.from.replace(/\s+/g, '_'),
+      target: transition.to.replace(/\s+/g, '_'),
+      label: formatLabel(transition.name),
+      type: 'custom',
+      data: {
+        policy,
+        actions: transition.actions || []
+      },
+    };
+  });
+
+  // Create a new dagre graph
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ 
+    rankdir: 'TB',
+    nodesep: 100,
+    ranksep: 150
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  // Add nodes and edges to dagre graph
+  nodes.forEach(node => {
+    g.setNode(node.id, { width: 150, height: 50 });
+  });
+
+  edges.forEach(edge => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  // Calculate layout
+  dagre.layout(g);
+
+  // Apply layout to nodes
+  nodes.forEach(node => {
+    const nodeWithPosition = g.node(node.id);
+    node.position = {
+      x: nodeWithPosition.x - 75, // Subtract half the width
+      y: nodeWithPosition.y - 25  // Subtract half the height
+    };
+  });
+
+  return { nodes, edges };
 };
 
-// Generate nodes from states
-const states = [...(config.places.states || []), ...(config.places.special_states || [])];
-const nodes = states.map((state) => ({
-  id: state.replace(' ', '_'), // Update state ID to replace spaces with underscores
-  type: state === 'backlog' ? 'input' : state === 'done' ? 'output' : 'default',
-  data: { 
-    label: formatLabel(state),
-    description: `${formatLabel(state)} state`
-  },
-  position: { x: 0, y: 0 }, // Initial position will be set by dagre
-  style: nodeStyles
-}));
-
-// Generate edges from transitions
-const allTransitions = [
-  ...(config.transitions.regular || []),
-  ...(config.transitions.special || [])
-];
-
-const edges: Edge[] = allTransitions.map((transition, index) => ({
-  id: `e${index}`,
-  source: transition.from.replace(' ', '_'), // Update source state ID to replace spaces with underscores
-  target: transition.to.replace(' ', '_'), // Update target state ID to replace spaces with underscores
-  label: formatLabel(transition.name),
-  style: edgeStyles,
-  labelStyle: edgeStyles.labelStyle,
-  data: {
-    requirements: transition.requires || []
-  }
-}));
-
-// Create a new dagre graph
-const g = new dagre.graphlib.Graph();
-g.setGraph({ 
-  rankdir: 'TB',  // Top to Bottom direction
-  nodesep: 100,   // Horizontal separation between nodes
-  ranksep: 150    // Vertical separation between ranks
-});
-g.setDefaultEdgeLabel(() => ({}));
-
-// Add nodes to dagre
-nodes.forEach((node) => {
-  g.setNode(node.id, { width: 150, height: 50 });
-});
-
-// Add edges to dagre
-edges.forEach((edge) => {
-  g.setEdge(edge.source, edge.target);
-});
-
-// Calculate layout
-dagre.layout(g);
-
-// Apply layout to nodes
-nodes.forEach((node) => {
-  const nodeWithPosition = g.node(node.id);
-  node.position = {
-    x: nodeWithPosition.x - 75, // Center node by subtracting half the width
-    y: nodeWithPosition.y - 25  // Center node by subtracting half the height
-  };
-});
-
-export const initialNodes = nodes;
-export const initialEdges = edges;
-export const defaultViewport = { x: 0, y: 0, zoom: 1.5 }; // 150% zoom
+// Export empty initial states that will be populated by App.tsx
+export const initialNodes: Node[] = [];
+export const initialEdges: Edge[] = [];

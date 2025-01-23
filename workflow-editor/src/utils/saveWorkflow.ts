@@ -1,10 +1,11 @@
 import { Node, Edge } from 'reactflow';
+import { saveWorkflowToServer } from '../services/api';
 
 interface WorkflowData {
   object_type: string;
   places: {
     states: string[];
-    special_states: string[];
+    special_states?: string[];
   };
   transitions: {
     regular: {
@@ -20,73 +21,69 @@ interface WorkflowData {
       requires?: string[];
     }[];
   };
+  metadata?: {
+    rules?: {
+      id: string;
+      description: string;
+    }[];
+  };
 }
 
-export const saveWorkflow = async (nodes: Node[], edges: Edge[]) => {
-  console.log('saveWorkflow called with nodes:', nodes);
-
-  // Create a map of node IDs to their current labels
-  const nodeIdToLabel = new Map(nodes.map(node => [
-    node.id,
-    node.data.label.toLowerCase().replace(/\s+/g, '_')
-  ]));
-
-  // Get regular states (just the IDs)
-  const states = nodes
-    .filter(node => node.type !== 'special' && node.id !== 'blocked')
-    .map(node => node.data.label.toLowerCase().replace(/\s+/g, '_'));
-
-  // Get special states (just the IDs)
-  const specialStates = nodes
-    .filter(node => node.type === 'special' || node.id === 'blocked')
-    .map(node => node.data.label.toLowerCase().replace(/\s+/g, '_'));
-
-  // Convert edges to transitions, using the current node labels
-  const transitions = edges.map(edge => ({
-    name: (edge.startLabel || 'transition').toLowerCase().replace(/\s+/g, '_'),
-    from: nodeIdToLabel.get(edge.source) || edge.source,
-    to: nodeIdToLabel.get(edge.target) || edge.target,
-    requires: edge.data?.requirements || []
-  }));
-
-  const workflowData: WorkflowData = {
-    object_type: 'Issue',
-    places: {
-      states,
-      special_states: specialStates
-    },
-    transitions: {
-      regular: transitions
-    }
-  };
-
+export const saveWorkflow = async (nodes: Node[], edges: Edge[]): Promise<boolean> => {
   try {
-    const response = await fetch('http://localhost:3001/api/save-workflow', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Create a map of node IDs to their current labels
+    const nodeIdToLabel = new Map(nodes.map(node => [
+      node.id,
+      node.data.label.toLowerCase().replace(/\s+/g, '_')
+    ]));
+
+    // Get regular states
+    const states = nodes
+      .filter(node => node.type !== 'special' && node.id !== 'blocked')
+      .map(node => node.data.label.toLowerCase().replace(/\s+/g, '_'));
+
+    // Get special states
+    const specialStates = nodes
+      .filter(node => node.type === 'special' || node.id === 'blocked')
+      .map(node => node.data.label.toLowerCase().replace(/\s+/g, '_'));
+
+    // Convert edges to transitions
+    const transitions = edges.map(edge => ({
+      name: (edge.label || edge.startLabel || 'transition').toLowerCase().replace(/\s+/g, '_'),
+      from: nodeIdToLabel.get(edge.source) || edge.source,
+      to: nodeIdToLabel.get(edge.target) || edge.target,
+      requires: edge.data?.requirements || []
+    }));
+
+    // Create the workflow data structure
+    const workflowData: WorkflowData = {
+      object_type: 'Document',
+      places: {
+        states,
+        special_states: specialStates.length > 0 ? specialStates : undefined
       },
-      body: JSON.stringify(workflowData),
-    });
+      transitions: {
+        regular: transitions
+      },
+      metadata: {
+        rules: nodes.flatMap(node => 
+          node.data.requirements?.map(req => ({
+            id: req,
+            description: node.data.requirementDescriptions?.[req] || ''
+          })) || []
+        )
+      }
+    };
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    console.log('Save successful:', result);
-
-    // After successful save, update the local workflow file
-    const workflowResponse = await fetch('http://localhost:3001/api/get-workflow');
-    if (workflowResponse.ok) {
-      const updatedWorkflow = await workflowResponse.json();
-      // You can dispatch an event or use a callback here to update the graph
-      window.dispatchEvent(new CustomEvent('workflowUpdated', { detail: updatedWorkflow }));
-    }
-
-    return result.success;
+    console.log('Saving workflow data:', workflowData);
+    
+    // Save to server
+    const response = await saveWorkflowToServer(workflowData);
+    console.log('Save response:', response);
+    
+    return response;
   } catch (error) {
-    console.error('Error saving workflow:', error);
-    throw error;
+    console.error('Error in saveWorkflow:', error);
+    return false;
   }
 };

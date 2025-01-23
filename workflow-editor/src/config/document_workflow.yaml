@@ -1,0 +1,64 @@
+---
+object_type: document
+places:
+  states:
+    - name: Draft
+    - name: Pending Review
+    - name: Reviewed
+    - name: Approved
+    - name: Rejected
+transitions:
+  regular:
+    - name: Submit
+      from: Draft
+      to: Pending Review
+      policy:
+        all:
+          - valid_word_count
+          - valid_clarity
+          - valid_completeness
+      actions:
+        - executor:
+            - name: analyze_document
+              method: get_word_count
+              result: word_count
+        - executor:
+            - name: analyze_document
+              method: get_clarity
+              result: clarity
+        - executor:
+            - name: analyze_document
+              method: get_completeness
+              result: completeness
+    - name: Review
+      from: Pending Review
+      to: Reviewed
+      policy:
+        all:
+          - valid_review_metrics
+        any:
+          - is_high_priority
+          - is_urgent
+      actions: []
+    - name: Approve
+      from: Reviewed
+      to: Approved
+      policy:
+        all:
+          - valid_approver
+          - approved_status
+      actions: []
+    - name: Reject
+      from: Reviewed
+      to: Rejected
+      policy:
+        all:
+          - has_rejection_reasons
+      actions: []
+    - name: Revise
+      from: Rejected
+      to: Draft
+      policy: {}
+      actions: []
+metadata:
+  rules: []

@@ -1,5 +1,5 @@
 ---
-object_type: Issue
+object_type: Document
 places:
   states:
     - draft
@@ -7,10 +7,9 @@ places:
     - reviewed
     - approved
     - rejected
-  special_states: []
 transitions:
   regular:
-    - name: submit
+    - name: submiter
       from: draft
       to: pending_review
       requires:
@@ -38,3 +37,5 @@ transitions:
       from: rejected
       to: draft
       requires: []
+metadata:
+  rules: []
