@@ -44,14 +44,70 @@ module CircuitBreaker
         score >= 80
 
       when 'valid_approval'
-        finalization = results['finalizeDocument'][:finalization]
-        CircuitBreaker::Logger.debug("  Checking finalization data: #{finalization.inspect}")
-        finalization.is_a?(Hash)
+        begin
+          CircuitBreaker::Logger.debug("  Checking valid_approval rule")
+          CircuitBreaker::Logger.debug("  Results: #{results.inspect}")
+          
+          unless results['finalizeDocument']
+            CircuitBreaker::Logger.error("  Missing finalizeDocument results")
+            return false
+          end
+          
+          finalization = results['finalizeDocument'][:finalization]
+          CircuitBreaker::Logger.debug("  Checking finalization data: #{finalization.inspect}")
+          
+          unless finalization.is_a?(Hash)
+            CircuitBreaker::Logger.error("  Invalid finalization data type")
+            return false
+          end
+          
+          required_fields = ['approver', 'timestamp', 'version']
+          missing_fields = required_fields - finalization.keys.map(&:to_s)
+          
+          if missing_fields.any?
+            CircuitBreaker::Logger.error("  Missing required fields: #{missing_fields.join(', ')}")
+            return false
+          end
+          
+          CircuitBreaker::Logger.debug("  Rule passed: all required fields present")
+          true
+        rescue StandardError => e
+          CircuitBreaker::Logger.error("  Error validating approval: #{e.message}")
+          false
+        end
 
       when 'valid_rejection'
-        rejection = results['rejectDocument'][:rejection]
-        CircuitBreaker::Logger.debug("  Checking rejection data: #{rejection.inspect}")
-        rejection.is_a?(Hash)
+        begin
+          CircuitBreaker::Logger.debug("  Checking valid_rejection rule")
+          CircuitBreaker::Logger.debug("  Results: #{results.inspect}")
+          
+          unless results['rejectDocument']
+            CircuitBreaker::Logger.error("  Missing rejectDocument results")
+            return false
+          end
+          
+          rejection = results['rejectDocument'][:rejection]
+          CircuitBreaker::Logger.debug("  Checking rejection data: #{rejection.inspect}")
+          
+          unless rejection.is_a?(Hash)
+            CircuitBreaker::Logger.error("  Invalid rejection data type")
+            return false
+          end
+          
+          required_fields = ['rejector', 'reason', 'suggestions']
+          missing_fields = required_fields - rejection.keys.map(&:to_s)
+          
+          if missing_fields.any?
+            CircuitBreaker::Logger.error("  Missing required fields: #{missing_fields.join(', ')}")
+            return false
+          end
+          
+          CircuitBreaker::Logger.debug("  Rule passed: all required fields present")
+          true
+        rescue StandardError => e
+          CircuitBreaker::Logger.error("  Error validating rejection: #{e.message}")
+          false
+        end
 
       else
         CircuitBreaker::Logger.error("  Unknown rule: #{@name}")

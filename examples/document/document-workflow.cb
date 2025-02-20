@@ -2,7 +2,22 @@ use {mock, log, rule} from "tools"
 
 token {
     title: "Circuit Breaker Documentation",
-    content: "# Circuit Breaker Pattern\nA detailed explanation of the circuit breaker pattern and its implementation in distributed systems. This document covers the core concepts, configuration options, and best practices for using circuit breakers effectively. It includes examples of different failure scenarios and how circuit breakers help prevent cascading failures across microservices. The document also discusses important considerations such as timeout settings, failure thresholds, and recovery strategies. Additionally, it provides guidance on monitoring and maintaining circuit breakers in production environments.",
+    content: "# Circuit Breaker Pattern
+
+## Summary
+This document provides a comprehensive guide to implementing and managing circuit breakers in distributed systems. It covers essential concepts, configuration options, and best practices for effective use of circuit breakers to prevent cascading failures.
+
+## Core Concepts
+A detailed explanation of the circuit breaker pattern and its implementation in distributed systems. This document covers the core concepts, configuration options, and best practices for using circuit breakers effectively.
+
+## Implementation Examples
+It includes examples of different failure scenarios and how circuit breakers help prevent cascading failures across microservices. The document also discusses important considerations such as timeout settings, failure thresholds, and recovery strategies.
+
+## Best Practices
+Additionally, it provides guidance on monitoring and maintaining circuit breakers in production environments.
+
+## Conclusion
+By following the guidelines and best practices outlined in this document, teams can effectively implement circuit breakers to improve system resilience and prevent cascading failures.",
     authorId: "author@example.com",
     state: "draft"
 }
@@ -67,4 +82,36 @@ workflow {
             all: [valid_rejection]
         }
     }
+}
+
+# Execute workflow transitions programmatically
+test {
+    # Initial state logging
+    log => "\nExecuting workflow steps...\n"
+    log => "Initial state: ${token.state}"
+    
+    # Try draft -> pending_review transition
+    log => "\nTrying draft -> pending_review transition..."
+    submit
+    log => "Success! New state: ${token.state}"
+    
+    # Try pending_review -> reviewed transition
+    log => "\nTrying pending_review -> reviewed transition..."
+    review
+    log => "Success! New state: ${token.state}"
+    
+    # Try reviewed -> approved transition
+    log => "\nTrying reviewed -> approved transition..."
+    approve
+    log => "Success! New state: ${token.state}"
+    
+    # Print final state
+    log => "\nFinal Document State:"
+    log => "===================="
+    log => "State: ${token.state}\n"
+    
+    # Print history
+    log => "\nDocument History:"
+    log => "----------------"
+    log => "${token.history}"
 }

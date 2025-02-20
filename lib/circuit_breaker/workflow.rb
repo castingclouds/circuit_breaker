@@ -25,11 +25,25 @@ module CircuitBreaker
     end
 
     def fire_transition(name)
-      CircuitBreaker::Logger.debug("Attempting to fire transition '#{name}' from state '#{@token.state}'")
-      transition = @transitions[name]
-      raise "Transition '#{name}' not found" unless transition
-      raise "Invalid state transition from '#{@token.state}' to '#{transition[:to]}'" unless transition[:from] == @token.state
-      CircuitBreaker::Logger.debug("Transition validation passed")
+      begin
+        CircuitBreaker::Logger.info("Attempting to fire transition '#{name}' from state '#{@token.state}'")
+        transition = @transitions[name]
+        CircuitBreaker::Logger.info("Found transition: #{transition.inspect}")
+        
+        unless transition
+          CircuitBreaker::Logger.error("Transition '#{name}' not found")
+          raise "Transition '#{name}' not found"
+        end
+        
+        unless transition[:from] == @token.state
+          CircuitBreaker::Logger.error("Invalid state transition from '#{@token.state}' to '#{transition[:to]}'")
+          raise "Invalid state transition from '#{@token.state}' to '#{transition[:to]}'"
+        end
+        
+        CircuitBreaker::Logger.info("Current token state: #{@token.state}")
+        CircuitBreaker::Logger.info("Target state: #{transition[:to]}")
+      
+      CircuitBreaker::Logger.info("Transition validation passed")
 
       # Execute actions
       results = {}
@@ -37,75 +51,118 @@ module CircuitBreaker
       
       transition[:actions].each do |action|
         tool_name, action_name = action
-        CircuitBreaker::Logger.debug("  Executing action: #{tool_name} => #{action_name}")
+        CircuitBreaker::Logger.info("  Executing action: #{tool_name} => #{action_name}")
         
-        tool = Tools::ToolRegistry.instance.get(tool_name)
-        raise "Tool '#{tool_name}' not found" unless tool
-        
-        result = tool.execute(action: action_name, token: @token)
-        CircuitBreaker::Logger.debug("  Action result: #{result.inspect}")
-        
-        if result[:success]
-          # Store only the result data, not the success flag
-          results[action_name] = result.reject { |k, _| k == :success }
-          CircuitBreaker::Logger.debug("  Stored result: #{results[action_name].inspect}")
-        else
-          CircuitBreaker::Logger.error("  Action failed: #{result[:error]}")
-          return { success: false, error: "Action '#{action_name}' failed: #{result[:error]}" }
+        begin
+          tool = Tools::ToolRegistry.instance.get(tool_name)
+          raise "Tool '#{tool_name}' not found" unless tool
+          
+          result = tool.execute(action: action_name, token: @token)
+          CircuitBreaker::Logger.info("  Action result: #{result.inspect}")
+          
+          if result[:success]
+            # Store only the result data, not the success flag
+            results[action_name] = result.reject { |k, _| k == :success }
+            CircuitBreaker::Logger.info("  Stored result for #{action_name}:")
+            results[action_name].each do |key, value|
+              CircuitBreaker::Logger.info("    #{key}: #{value.inspect}")
+            end
+          else
+            error_msg = "Action '#{action_name}' failed: #{result[:error]}"
+            CircuitBreaker::Logger.error("  " + error_msg)
+            raise error_msg
+          end
+        rescue StandardError => e
+          CircuitBreaker::Logger.error("Error executing action: #{e.message}")
+          return { success: false, error: e.message }
         end
       end
-
+      
       # Validate rules
-      if transition[:rules]
-        CircuitBreaker::Logger.debug("Validating rules: #{transition[:rules].inspect}")
-        all_rules = transition[:rules][:all] || []
-        any_rules = transition[:rules][:any] || []
+      begin
+        if transition[:rules]
+          CircuitBreaker::Logger.info("Validating rules: #{transition[:rules].inspect}")
+          all_rules = transition[:rules][:all] || []
+          any_rules = transition[:rules][:any] || []
 
-        # All rules must pass
-        CircuitBreaker::Logger.debug("  Checking required rules: #{all_rules.inspect}")
-        all_rules.each do |rule|
-          CircuitBreaker::Logger.debug("    Validating rule: #{rule}")
-          result = rule.validate(results)
-          CircuitBreaker::Logger.debug("    Rule result: #{result}")
-          
-          unless result
-            CircuitBreaker::Logger.error("    Rule '#{rule.name}' failed")
-            return { success: false, error: "Rule '#{rule.name}' failed" }
-          end
-        end
-        CircuitBreaker::Logger.debug("  All required rules passed") if all_rules.any?
-
-        # At least one rule must pass
-        if any_rules.any?
-          CircuitBreaker::Logger.debug("  Checking optional rules: #{any_rules.inspect}")
-          passed = false
-          
-          any_rules.each do |rule|
-            CircuitBreaker::Logger.debug("    Validating rule: #{rule}")
-            result = rule.validate(results)
-            CircuitBreaker::Logger.debug("    Rule result: #{result}")
-            
-            if result
-              passed = true
-              CircuitBreaker::Logger.debug("    Rule '#{rule.name}' passed")
-              break
+          # All rules must pass
+          CircuitBreaker::Logger.info("  Checking required rules: #{all_rules.inspect}")
+          all_rules.each do |rule|
+            begin
+              CircuitBreaker::Logger.info("    Validating rule: #{rule.name}")
+              result = rule.validate(results)
+              CircuitBreaker::Logger.info("    Rule result: #{result}")
+              
+              unless result
+                error_msg = "Rule '#{rule.name}' failed"
+                CircuitBreaker::Logger.error("    " + error_msg)
+                raise error_msg
+              end
+            rescue StandardError => e
+              CircuitBreaker::Logger.error("Error validating rule '#{rule.name}': #{e.message}")
+              return { success: false, error: e.message }
             end
           end
-          
-          unless passed
-            CircuitBreaker::Logger.error("  No optional rules passed")
-            return { success: false, error: "None of the optional rules passed" }
-          end
-          CircuitBreaker::Logger.debug("  At least one optional rule passed")
-        end
-      end
+          CircuitBreaker::Logger.info("  All required rules passed") if all_rules.any?
 
-      # Update token state
-      CircuitBreaker::Logger.debug("All validations passed, updating state from '#{@token.state}' to '#{transition[:to]}'")
-      @token.state = transition[:to]
-      CircuitBreaker::Logger.debug("State updated successfully")
+          # At least one rule must pass
+          if any_rules.any?
+            CircuitBreaker::Logger.info("  Checking optional rules: #{any_rules.map(&:name).inspect}")
+            passed = false
+            errors = []
+            
+            any_rules.each do |rule|
+              begin
+                CircuitBreaker::Logger.info("    Validating rule: #{rule.name}")
+                result = rule.validate(results)
+                CircuitBreaker::Logger.info("    Rule result: #{result}")
+                
+                if result
+                  passed = true
+                  CircuitBreaker::Logger.info("    Rule '#{rule.name}' passed")
+                  break
+                else
+                  CircuitBreaker::Logger.info("    Rule '#{rule.name}' failed")
+                  errors << "Rule '#{rule.name}' failed"
+                end
+              rescue StandardError => e
+                CircuitBreaker::Logger.error("Error validating rule '#{rule.name}': #{e.message}")
+                errors << e.message
+              end
+            end
+            
+            unless passed
+              error_msg = "No optional rules passed: #{errors.join(', ')}"
+              CircuitBreaker::Logger.error("  " + error_msg)
+              return { success: false, error: error_msg }
+            end
+            CircuitBreaker::Logger.info("  At least one optional rule passed")
+          end
+        end
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("Error during rule validation: #{e.message}")
+        return { success: false, error: e.message }
+      end
       
-      { success: true, results: results }
+      # Update token state and history
+      begin
+        CircuitBreaker::Logger.info("All validations passed, updating state from '#{@token.state}' to '#{transition[:to]}'")
+        @token.update_state(transition[:to], name)
+        CircuitBreaker::Logger.info("State updated successfully")
+        CircuitBreaker::Logger.info("New token state: #{@token.state}")
+        
+        { success: true, results: results }
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("Error updating state: #{e.message}")
+        CircuitBreaker::Logger.error(e.backtrace.join("\n"))
+        { success: false, error: e.message }
+      end
+      
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("Error during transition: #{e.message}")
+        CircuitBreaker::Logger.error(e.backtrace.join("\n"))
+        { success: false, error: e.message }
+      end
     end
 
     class Transition
@@ -115,7 +172,12 @@ module CircuitBreaker
       end
 
       def fire
-        @workflow.fire_transition(@name)
+        result = @workflow.fire_transition(@name)
+        unless result[:success]
+          CircuitBreaker::Logger.error("Transition failed: #{result[:error]}")
+          raise result[:error]
+        end
+        result
       end
     end
   end

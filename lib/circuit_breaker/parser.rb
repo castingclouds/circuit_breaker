@@ -135,32 +135,67 @@ module CircuitBreaker
     end
 
     def parse_single_transition(spec, body)
-      CircuitBreaker::Logger.debug("\nFound transition: #{spec}")
-      CircuitBreaker::Logger.debug("Transition body:")
-      CircuitBreaker::Logger.debug(body)
+      begin
+        CircuitBreaker::Logger.debug("\nFound transition: #{spec}")
+        CircuitBreaker::Logger.debug("Transition body:")
+        CircuitBreaker::Logger.debug(body)
 
-      name, states = parse_transition_spec(spec)
-      from_state, to_state = states.split('->').map(&:strip)
+        name, states = parse_transition_spec(spec)
+        from_state, to_state = states.split('->').map(&:strip)
 
-      CircuitBreaker::Logger.debug("  Name: #{name}")
-      CircuitBreaker::Logger.debug("  From: #{from_state}")
-      CircuitBreaker::Logger.debug("  To: #{to_state}")
+        CircuitBreaker::Logger.debug("  Name: #{name}")
+        CircuitBreaker::Logger.debug("  From: #{from_state}")
+        CircuitBreaker::Logger.debug("  To: #{to_state}")
 
-      actions = parse_actions(body)
-      rules = parse_rules(body)
+        unless @states.include?(from_state)
+          CircuitBreaker::Logger.error("  Invalid from state: #{from_state}")
+          raise "Invalid from state: #{from_state}"
+        end
 
-      @workflow.add_transition(
-        name: name.strip,
-        from: from_state,
-        to: to_state,
-        actions: actions,
-        rules: rules
-      )
+        unless @states.include?(to_state)
+          CircuitBreaker::Logger.error("  Invalid to state: #{to_state}")
+          raise "Invalid to state: #{to_state}"
+        end
+
+        actions = parse_actions(body)
+        rules = parse_rules(body)
+
+        @workflow.add_transition(
+          name: name.strip,
+          from: from_state,
+          to: to_state,
+          actions: actions,
+          rules: rules
+        )
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("Error parsing transition: #{e.message}")
+        raise e
+      end
     end
 
     def parse_transition_spec(spec)
-      parts = spec.split(',').map(&:strip)
-      [parts[0], parts[1]]
+      begin
+        parts = spec.split(',').map(&:strip)
+        CircuitBreaker::Logger.debug("  Parsing transition spec: #{parts.inspect}")
+        
+        if parts.length != 2
+          CircuitBreaker::Logger.error("  Invalid transition spec format: #{spec}")
+          raise "Invalid transition spec format: #{spec}"
+        end
+        
+        name = parts[0]
+        states = parts[1]
+        
+        unless states =~ /\s*\w+\s*->\s*\w+\s*/
+          CircuitBreaker::Logger.error("  Invalid state transition format: #{states}")
+          raise "Invalid state transition format: #{states}"
+        end
+        
+        [name, states]
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("Error parsing transition spec: #{e.message}")
+        raise e
+      end
     end
 
     def parse_actions(body)

@@ -21,8 +21,8 @@ module CircuitBreaker
         action = args[:action]
         token = args[:token]
 
-        CircuitBreaker::Logger.debug("Mock tool executing action: #{action}")
-        CircuitBreaker::Logger.debug("Token state: #{token&.state}")
+        CircuitBreaker::Logger.info("Mock tool executing action: #{action}")
+        CircuitBreaker::Logger.info("Token state: #{token&.state}")
 
         # Ensure token exists
         unless token
@@ -32,34 +32,39 @@ module CircuitBreaker
 
         # Get content safely
         content = token.content.to_s
-        CircuitBreaker::Logger.debug("Processing content length: #{content.length} characters")
+        CircuitBreaker::Logger.info("Processing content length: #{content.length} characters")
 
-        result = case action
-        when 'analyzeDocument'
-          CircuitBreaker::Logger.debug("Analyzing document content...")
-          analyze_document(content)
-        when 'analyzeClarity'
-          CircuitBreaker::Logger.debug("Analyzing document clarity...")
-          analyze_clarity(content)
-        when 'analyzeCompleteness'
-          CircuitBreaker::Logger.debug("Analyzing document completeness...")
-          analyze_completeness(content)
-        when 'reviewDocument'
-          CircuitBreaker::Logger.debug("Reviewing document...")
-          review_document
-        when 'finalizeDocument'
-          CircuitBreaker::Logger.debug("Finalizing document...")
-          finalize_document
-        when 'rejectDocument'
-          CircuitBreaker::Logger.debug("Rejecting document...")
-          reject_document
-        else
-          CircuitBreaker::Logger.error("Unknown action: #{action}")
-          { success: false, error: "Unknown action: #{action}" }
+        begin
+          result = case action
+          when 'analyzeDocument'
+            CircuitBreaker::Logger.info("Analyzing document content...")
+            analyze_document(content)
+          when 'analyzeClarity'
+            CircuitBreaker::Logger.info("Analyzing document clarity...")
+            analyze_clarity(content)
+          when 'analyzeCompleteness'
+            CircuitBreaker::Logger.info("Analyzing document completeness...")
+            analyze_completeness(content)
+          when 'reviewDocument'
+            CircuitBreaker::Logger.info("Reviewing document...")
+            review_document
+          when 'finalizeDocument'
+            CircuitBreaker::Logger.info("Finalizing document...")
+            finalize_document
+          when 'rejectDocument'
+            CircuitBreaker::Logger.info("Rejecting document...")
+            reject_document
+          else
+            CircuitBreaker::Logger.error("Unknown action: #{action}")
+            { success: false, error: "Unknown action: #{action}" }
+          end
+
+          CircuitBreaker::Logger.info("Action result: #{result.inspect}")
+          result
+        rescue StandardError => e
+          CircuitBreaker::Logger.error("Error executing action '#{action}': #{e.message}")
+          { success: false, error: e.message }
         end
-
-        CircuitBreaker::Logger.debug("Action result: #{result.inspect}")
-        result
       end
 
       private
@@ -138,40 +143,65 @@ module CircuitBreaker
       end
 
       def review_document
+        CircuitBreaker::Logger.debug("Starting document review...")
+        reviewer = "mock.reviewer@example.com"
+        comments = [
+          "Good coverage of core concepts",
+          "Examples are clear and relevant"
+        ]
+        score = 85
+        
+        CircuitBreaker::Logger.debug("Review by #{reviewer} with score #{score}")
+        CircuitBreaker::Logger.debug("Comments: #{comments.join(', ')}")
+        
         {
           success: true,
           review: {
-            reviewer: "mock.reviewer@example.com",
-            comments: [
-              "Good coverage of core concepts",
-              "Examples are clear and relevant"
-            ],
-            score: 85
+            reviewer: reviewer,
+            comments: comments,
+            score: score
           }
         }
       end
 
       def finalize_document
+        CircuitBreaker::Logger.debug("Starting document finalization...")
+        approver = "mock.approver@example.com"
+        timestamp = Time.now.iso8601
+        version = "1.0.0"
+        
+        CircuitBreaker::Logger.debug("Finalization by #{approver} at #{timestamp}")
+        CircuitBreaker::Logger.debug("Setting version to #{version}")
+        
         {
           success: true,
           finalization: {
-            approver: "mock.approver@example.com",
-            timestamp: Time.now.iso8601,
-            version: "1.0.0"
+            approver: approver,
+            timestamp: timestamp,
+            version: version
           }
         }
       end
 
       def reject_document
+        CircuitBreaker::Logger.debug("Starting document rejection...")
+        rejector = "mock.rejector@example.com"
+        reason = "Needs more detailed examples"
+        suggestions = [
+          "Add code snippets for each scenario",
+          "Include performance benchmarks"
+        ]
+        
+        CircuitBreaker::Logger.debug("Rejection by #{rejector}")
+        CircuitBreaker::Logger.debug("Reason: #{reason}")
+        CircuitBreaker::Logger.debug("Suggestions: #{suggestions.join(', ')}")
+        
         {
           success: true,
           rejection: {
-            rejector: "mock.rejector@example.com",
-            reason: "Needs more detailed examples",
-            suggestions: [
-              "Add code snippets for each scenario",
-              "Include performance benchmarks"
-            ]
+            rejector: rejector,
+            reason: reason,
+            suggestions: suggestions
           }
         }
       end
