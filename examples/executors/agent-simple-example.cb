@@ -1,0 +1,42 @@
+use { ask, print } from "tools"
+
+let SYSTEM_PROMPT = "You are an expert assistant who provides concise and factual responses."
+let USER_PROMPT = "What is the capital of France?"
+
+agent_1 {
+  type: "agent"
+  task: "Simple Q&A using ask tool"
+  model: "claude-3-sonnet-20240229"
+  provider: "anthropic"
+}
+
+agent_2 {
+  type: "agent"
+  task: "Simple Q&A using ask tool"
+  model: "llama3.1:latest"
+  provider: "ollama"
+}
+
+agent_3 {
+  type: "agent"
+  task: "Simple Q&A using ask tool"
+  model: "mistral-nemo:latest"
+  provider: "ollama"
+}
+
+pipeline simple_qna {
+  with agent_3
+  execute {
+    ask => question {
+      prompt: USER_PROMPT,
+      response: ""
+    }
+  }
+  execute {
+    print => result {
+      message: question
+    }
+  }
+}
+
+run simple_qna

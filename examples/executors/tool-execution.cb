@@ -1,0 +1,11 @@
+use { print } from "tools"
+
+pipeline hello_world {
+  execute {
+    print => output {
+      message: "Hello, World!"
+    }
+  }
+}
+
+run hello_world

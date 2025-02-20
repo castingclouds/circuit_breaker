@@ -1,6 +1,6 @@
 # Circuit Breaker
 
-A powerful Ruby library for building AI-powered workflows with Agents and Assistants powered by Petri Nets.. It seamlessly integrates with various LLM providers and offers robust tools for document analysis, workflow management, and autonomous agents.
+A powerful Ruby library for building AI-powered workflows and pipelines. It seamlessly integrates with various LLM providers and offers robust tools for data analysis, workflow management, and autonomous agents.
 
 ## Features
 
@@ -10,6 +10,13 @@ A powerful Ruby library for building AI-powered workflows with Agents and Assist
 - Unified rules system for validation and transitions
 - Comprehensive history tracking
 - Event handling and state management
+
+### Pipeline System
+- Simple and powerful pipeline definition syntax
+- Tool-based action execution
+- Parameter passing between actions
+- Modular and reusable pipeline components
+- Easy integration with custom tools
 
 ### Rules System
 - Unified DSL for defining rules and validations
@@ -58,83 +65,147 @@ $ gem install circuit_breaker-wf
 
 ## Usage
 
-### Action-Rule Data Flow
+### Creating and Running a Pipeline
 
-Circuit Breaker provides a powerful mechanism for passing data between actions and rules during workflow transitions. Here's how it works:
+Circuit Breaker supports both workflows and pipelines. Here's how to use each:
+
+### Pipeline Example
+
+```ruby
+# tool-execution.cb
+use { print } from "tools"
+
+pipeline hello_world {
+  execute {
+    print => output {
+      message: "Hello, World!"
+    }
+  }
+}
+
+run hello_world
+```
+
+Run the pipeline:
+```bash
+$ cb pipeline examples/executors/tool-execution.cb
+```
 
 ### Creating a Workflow
 
 ```ruby
-workflow = CircuitBreaker::Workflow::DSL.define do
-  # Define states
-  states :draft, :pending_review, :reviewed, :approved, :rejected
+# document-workflow.cb
+use { mock, log, rule } from "tools"
 
-  # Define transitions with rules
-  flow(:draft >> :pending_review), :submit do
-     policy all: [:valid_reviewer]
-  end
+token {
+  title: "Circuit Breaker Documentation",
+  content: "...",
+  authorId: "author@example.com",
+  state: "draft"
+}
 
-  flow(:pending_review >> :reviewed), :review do
-    policy all: [:valid_review],
-           any: [:is_high_priority, :is_urgent]
-  end
-end
+workflow {
+  transition (submit, draft -> pending_review) {
+    actions {
+      mock => analyzeDocument
+      mock => analyzeClarity
+    }
+    policy {
+      all: [valid_word_count, valid_clarity],
+      any: [has_summary, has_examples]
+    }
+  }
+}
 ```
 
-### Create and add token
-```ruby
-token = CircuitBreaker::Token.new
-workflow.add_token(token)
+Run the workflow:
+```bash
+$ cb workflow examples/document/document-workflow.cb
 ```
 
-### Fire transitions
-```ruby
-workflow.fire_transition(:submit, token)
-```
+## Tool Development
 
-## Action-Rule Data Flow
-1. **Actions with Anonymous Results**
-```ruby
-flow :draft >> :pending_review, :submit do
-  actions do
-    # Execute action and store result in context
-    execute analyzer, :analyze_clarity
-  end
-  policy all: [:valid_clarity]
-end
-```
+### Creating a Custom Tool
 
-2. **Accessing Results in Rules**
 ```ruby
-CircuitBreaker::Rules::DSL.define do
-  rule :valid_clarity do |token|
-    # Retrieve stored result using the same key
-    clarity = context.get_result(:clarity)
-    clarity && clarity[:score] >= 70
+module CircuitBreaker
+  module Tools
+    class Print < Tool
+      def output(args)
+        message = args[:message]
+        puts message
+        { success: true }
+      end
+    end
   end
 end
 ```
 
-### Data Flow Process
-
-- Actions are executed first during a transition
-- Results are stored in an action context using the specified key
-- Rules can access these results through the same key
-- This enables rules to validate based on action outputs
-
-This pattern allows for:
-- Clean separation between action execution and rule validation
-- Reusable actions with different validation rules
-- Complex rule chains based on multiple action results
-- Clear data flow tracking during transitions
-
-## History Tracking
-
-The workflow automatically tracks all transitions:
+### Using Tools in Pipelines
 
 ```ruby
-token.history.each do |event|
-  puts "#{event[:timestamp]}: #{event[:transition]} from #{event[:from]} to #{event[:to]}"
+# Import the tool
+use { print } from "tools"
+
+# Use it in a pipeline
+pipeline log_message {
+  execute {
+    print => output {
+      message: "Processing started..."
+    }
+  }
+}
+```
+
+### Tool Parameters
+
+Tools can accept various parameters:
+- Simple values: `message: "Hello"`
+- Objects: `config: { timeout: 30 }`
+- Arrays: `tags: ["draft", "review"]`
+
+## Command Line Interface
+
+Circuit Breaker provides a command-line interface (CLI) for running workflows and pipelines:
+
+### Running Workflows
+```bash
+$ cb workflow path/to/workflow.cb [--debug]
+```
+
+### Running Pipelines
+```bash
+$ cb pipeline path/to/pipeline.cb [--debug]
+```
+
+Options:
+- `--debug`: Enable debug logging for detailed execution information
+
+## Examples
+
+The repository includes several example workflows and pipelines:
+
+### Document Processing Workflow
+- `examples/document/document-workflow.cb`: A workflow for document review and approval
+- Demonstrates state transitions, actions, and policy rules
+- Uses mock tools for document analysis
+
+### Simple Pipeline
+- `examples/executors/tool-execution.cb`: A simple pipeline that prints a message
+- Demonstrates tool imports and basic pipeline execution
+- Uses the print tool for output
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -am 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 end
 ```
 
@@ -154,72 +225,125 @@ While basic Petri nets are not Turing complete, our implementation is closer to 
 
 ## Components
 
-### Workflow Engine
+### Core Components
 
-The workflow engine provides:
-- State management
-- Transition validation
-- Rule enforcement
-- Event tracking
-- History management
+1. **Pipeline Engine**
+   - Tool-based execution flow
+   - Parameter passing between actions
+   - Simple and intuitive syntax
+   - Modular pipeline definitions
 
-Example:
+2. **Workflow Engine**
+   - State management
+   - Transition validation
+   - Rule enforcement
+   - Event tracking
+   - History management
+
+### Pipeline Example
+
 ```ruby
-# Define rules
-rule :has_reviewer,
-     desc: "Document must have a reviewer assigned",
-     &requires(:reviewer_id)
-
-rule :title,
-     desc: "Document title is required",
-     &must_be_present(:title)
-
-# Create workflow instance
-workflow = DocumentWorkflow.new(document)
-workflow.submit  # Transition to pending_review
+# Define a pipeline
+pipeline process_document {
+  execute {
+    analyze => content {
+      text: token.content,
+      options: { detailed: true }
+    }
+    
+    summarize => text {
+      input: analyze.output,
+      max_length: 100
+    }
+  }
+}
 ```
 
-### AI Executors
+### Workflow Example
 
-Two main executor types:
-
-1. AssistantExecutor
-   - Tool-based execution
-   - Context management
-   - Memory persistence
-   - Error handling
-
-2. AgentExecutor
-   - Autonomous task execution
-   - Tool discovery
-   - Planning capabilities
-   - Progress tracking
+```ruby
+# Define a workflow
+workflow {
+  transition (submit, draft -> review) {
+    actions {
+      analyze => document
+      validate => content
+    }
+    policy {
+      all: [has_reviewer, valid_content]
+    }
+  }
+}
+```
 
 ### Tool Framework
 
-Tools can be:
-- Basic tools with direct execution
-- Chainable tools for complex pipelines
-- Stateful tools with context
-- Fallback-enabled tools
+Tools are the building blocks of both pipelines and workflows:
 
-Example chainable tool:
+1. **Basic Tools**
+   ```ruby
+   class Print < Tool
+     def output(args)
+       message = args[:message]
+       puts message
+       { success: true }
+     end
+   end
+   ```
+
+2. **Chainable Tools**
+   ```ruby
+   class DocumentAnalyzer < Tool
+     def analyze(args)
+       content = args[:content]
+       result = process_content(content)
+       { 
+         success: true,
+         analysis: result,
+         next_action: 'validate'
+       }
+     end
+   end
+   ```
+
+3. **AI-Powered Tools**
+   ```ruby
+   class ContentImprover < Tool
+     def improve(args)
+       text = args[:text]
+       suggestions = llm.generate_improvements(text)
+       {
+         success: true,
+         improvements: suggestions
+       }
+     end
+   end
+   ```
+
+## Configuration
+
+### LLM Integration
 ```ruby
-class ChainableTool < CircuitBreaker::Executors::LLM::ChainableTool
-  def initialize
-    super(
-      name: 'chainable_tool',
-      description: 'Part of processing pipeline',
-      input_schema: { type: 'string' },
-      output_schema: { type: 'object' }
-    )
-  end
+CircuitBreaker.configure do |config|
+  # Ollama Configuration
+  config.ollama_base_url = 'http://localhost:11434'
+  config.default_model = 'qwen2.5-coder'
 
-  def execute(input, context)
-    result = process(input)
-    next_tool = context.available_tools.find { |t| t.can_handle?(result) }
-    context.chain(next_tool) if next_tool
-  end
+  # OpenAI Configuration
+  config.openai_api_key = ENV['OPENAI_API_KEY']
+  config.openai_model = 'gpt-4'
+
+  # Memory Settings
+  config.max_memory_tokens = 4000
+  config.memory_window_size = 10
+
+  # Tool Settings
+  config.default_tools = [
+    DocumentAnalyzer,
+    ContentImprover,
+    Print
+  ]
+  config.tool_timeout = 30  # seconds
 end
 ```
 
@@ -227,80 +351,40 @@ end
 
 See the `examples` directory for complete examples:
 
-1. Document Workflow
-   - Complete document management system
-   - AI-powered analysis
-   - Review process automation
-   - State tracking
+1. **Document Processing**
+   - `examples/document/document-workflow.cb`: Document review workflow
+   - `examples/pipelines/document-pipeline.cb`: Document analysis pipeline
+   - Demonstrates both workflow and pipeline approaches
 
-2. Research Assistant
-   - Autonomous research agent
-   - Source gathering
-   - Summary generation
-   - Citation management
-
-## LLM Providers
-### LLM Configuration
-```ruby
-# Configure Ollama
-CircuitBreaker.configure do |config|
-  config.ollama_base_url = 'http://localhost:11434'
-  config.default_model = 'qwen2.5-coder'
-end
-
-# Configure OpenAI
-CircuitBreaker.configure do |config|
-  config.openai_api_key = ENV['OPENAI_API_KEY']
-  config.default_model = 'gpt-4'
-end
-```
-
-### Memory Settings
-
-```ruby
-CircuitBreaker.configure do |config|
-  config.max_memory_tokens = 4000
-  config.memory_window_size = 10
-end
-```
-
-### Tool Settings
-
-```ruby
-CircuitBreaker.configure do |config|
-  config.default_tools = [
-    ContentAnalysisTool,
-    SentimentAnalysisTool,
-    ImprovementTool
-  ]
-  config.tool_timeout = 30  # seconds
-end
-```
+2. **Tool Examples**
+   - `examples/executors/tool-execution.cb`: Basic tool usage
+   - `examples/tools/custom-tool.rb`: Custom tool implementation
+   - Shows different tool patterns and best practices
 
 ## Best Practices
 
-1. Workflow Design
-   - Keep states and transitions clear
+1. **Pipeline Design**
+   - Keep pipelines focused and modular
+   - Use clear action and parameter names
+   - Chain tools effectively
+   - Handle errors gracefully
+
+2. **Workflow Design**
+   - Define clear states and transitions
    - Use descriptive rule names
    - Implement proper validation
    - Track state changes
 
-2. AI Integration
-   - Choose appropriate models
-   - Handle errors gracefully
-   - Implement retries
-   - Monitor performance
-
-3. Tool Development
-   - Keep tools focused
-   - Provide clear descriptions
-   - Include fallback behavior
-   - Handle errors appropriately
+3. **Tool Development**
+   - Keep tools single-purpose
+   - Provide clear documentation
+   - Include error handling
+   - Support both pipeline and workflow usage
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Add tests for new features
 4. Submit a pull request
 

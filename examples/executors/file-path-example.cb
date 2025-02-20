@@ -1,0 +1,38 @@
+// Import tools
+use { get_ts_files, print, read_file } from "tools"
+
+// Define the file reader pipeline
+pipeline file_reader {
+  // Get list of files
+  execute {
+    get_ts_files => files { 
+      directory: "src/tools"
+      recursive: false
+      exclude: ["code-analysis", "node_modules", "dist", "__tests__"]
+    }
+  }
+
+  // Get first file path
+  execute {
+    print => first_file {
+      message: files[0]
+    }
+  }
+
+  // Read file using file() function
+  execute {
+    read_file => content {
+      path: file(first_file)
+    }
+  }
+
+  // Print content
+  execute {
+    print => output {
+      message: content
+    }
+  }
+}
+
+
+run file_reader

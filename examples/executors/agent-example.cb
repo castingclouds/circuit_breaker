@@ -1,0 +1,80 @@
+
+use { get_ts_files, print, ask, read_file, log, file } from "tools"
+
+log => _ {
+  level: "debug"
+  message: "Starting code analyzer"
+}
+
+let SYSTEM_PROMPT = """
+You are a TypeScript code analyzer. Your task is to analyze TypeScript code and provide specific, actionable feedback.
+Focus on:
+1. Code quality and best practices
+2. Potential bugs or issues
+3. Performance improvements
+4. Type safety considerations
+
+For each file, provide:
+1. A brief summary of the file's purpose
+2. Specific suggestions for improvement
+3. Any potential issues or concerns
+4. A confidence score for each suggestion (High/Medium/Low)
+"""
+
+let USER_PROMPT = """
+Analyze this TypeScript file and provide feedback on code quality, potential issues, and suggested improvements.
+Focus on practical, actionable suggestions that would improve the code's reliability, maintainability, and performance.
+Include actual code blocks for HIGH confidence suggestions.
+"""
+
+agent_analyzer {
+  type: "agent"
+  task: "Code Analyzer"
+  model: "llama3.1:latest"
+  provider: "ollama"
+  max_tokens: 4000
+  context_window: 16384
+  systemPrompt: SYSTEM_PROMPT
+}
+
+// Define the code analyzer pipeline
+pipeline code_analyzer {
+  with agent_analyzer
+  
+  execute {
+    get_ts_files => files { 
+      directory: "src/tools"
+      recursive: false
+      exclude: ["code-analysis", "node_modules", "dist", "__tests__"]
+    }
+  }
+
+  // Get first file path
+  execute {
+    print => first_file {
+      message: files[0]
+    }
+  }
+
+  // Read file using file() function
+  execute {
+    read_file => content {
+      path: file(first_file)
+    }
+  }
+
+  execute {
+    ask => analysis {
+      prompt: USER_PROMPT + "\n\nHere is the code to analyze:\n" + content
+      response: ""
+    }
+  }
+  
+  execute {
+    print => output {
+      message: analysis
+    }
+  }
+}
+
+run code_analyzer

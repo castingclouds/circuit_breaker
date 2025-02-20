@@ -7,16 +7,72 @@ module CircuitBreaker
   class CLI < Thor
     class_option :debug, type: :boolean, default: false, desc: 'Enable debug output'
     
-    desc "start WORKFLOW_FILE", "Start a workflow from the given file"
-    def start(workflow_file)
+    desc "workflow FILE", "Execute a workflow from the given file"
+    def workflow(file)
       CircuitBreaker::Logger.debug_enabled = options[:debug]
       CircuitBreaker::Logger.debug("Debug mode enabled")
 
-      unless File.exist?(workflow_file)
-        CircuitBreaker::Logger.error("Workflow file '#{workflow_file}' not found")
+      unless File.exist?(file)
+        CircuitBreaker::Logger.error("File '#{file}' not found")
         exit 1
       end
 
+      unless file.end_with?('.cb')
+        CircuitBreaker::Logger.error("Unsupported file type: #{file}")
+        exit 1
+      end
+
+      execute_workflow(file)
+    end
+
+    desc "pipeline FILE", "Execute a pipeline from the given file"
+    def pipeline(file)
+      CircuitBreaker::Logger.debug_enabled = options[:debug]
+      CircuitBreaker::Logger.debug("Debug mode enabled")
+
+      unless File.exist?(file)
+        CircuitBreaker::Logger.error("File '#{file}' not found")
+        exit 1
+      end
+
+      unless file.end_with?('.cb')
+        CircuitBreaker::Logger.error("Unsupported file type: #{file}")
+        exit 1
+      end
+
+      execute_pipeline(file)
+    end
+
+    private
+
+    def execute_pipeline(file)
+      CircuitBreaker::Logger.info("Loading pipeline from #{file}...")
+      pipeline = CircuitBreaker.load_pipeline(file)
+      
+      CircuitBreaker::Logger.info("\nPipeline loaded:")
+      CircuitBreaker::Logger.info("Name: #{pipeline.name}")
+      CircuitBreaker::Logger.info("Actions:")
+      pipeline.actions.each do |tool, action, params|
+        CircuitBreaker::Logger.info("  - #{tool} => #{action}")
+        CircuitBreaker::Logger.debug("    Parameters: #{params.inspect}")
+      end
+
+      CircuitBreaker::Logger.info("\nExecuting pipeline...")
+      begin
+        result = pipeline.execute
+        if result[:success]
+          CircuitBreaker::Logger.info("Pipeline executed successfully")
+          CircuitBreaker::Logger.debug("Results: #{result[:results].inspect}")
+        else
+          raise result[:error]
+        end
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("\nError: #{e.message}")
+        exit 1
+      end
+    end
+
+    def execute_workflow(workflow_file)
       CircuitBreaker::Logger.info("Loading workflow from #{workflow_file}...")
       workflow = CircuitBreaker.load_workflow(workflow_file)
       
@@ -102,8 +158,8 @@ module CircuitBreaker
         workflow.token.history.each do |event|
           CircuitBreaker::Logger.info("#{event[:timestamp]}: #{event[:transition]} from #{event[:from]} to #{event[:to]}")
         end
-      rescue => e
-        CircuitBreaker::Logger.error("Error: #{e.message}")
+      rescue StandardError => e
+        CircuitBreaker::Logger.error("\nError: #{e.message}")
         exit 1
       end
     end
