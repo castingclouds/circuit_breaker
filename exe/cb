@@ -1,0 +1,146 @@
+#!/usr/bin/env ruby
+
+require 'thor'
+require_relative '../lib/circuit_breaker'
+
+module CircuitBreaker
+  class CLI < Thor
+    class_option :debug, type: :boolean, default: false, desc: 'Enable debug output'
+    
+    desc "start WORKFLOW_FILE", "Start a workflow from the given file"
+    def start(workflow_file)
+      CircuitBreaker::Logger.debug_enabled = options[:debug]
+      CircuitBreaker::Logger.debug("Debug mode enabled")
+
+      unless File.exist?(workflow_file)
+        CircuitBreaker::Logger.error("Workflow file '#{workflow_file}' not found")
+        exit 1
+      end
+
+      CircuitBreaker::Logger.info("Loading workflow from #{workflow_file}...")
+      workflow = CircuitBreaker.load_workflow(workflow_file)
+      
+      CircuitBreaker::Logger.info("\nWorkflow loaded:")
+      CircuitBreaker::Logger.info("Token:")
+      CircuitBreaker::Logger.info("  Title: #{workflow.token.title}")
+      CircuitBreaker::Logger.info("  Content: #{workflow.token.content.lines.first}...")
+      CircuitBreaker::Logger.info("  Author: #{workflow.token.author_id}")
+      CircuitBreaker::Logger.info("  State: #{workflow.token.state}")
+      
+      CircuitBreaker::Logger.debug("Full token content:")
+      CircuitBreaker::Logger.debug(workflow.token.content)
+      
+      CircuitBreaker::Logger.info("\nStates:")
+      CircuitBreaker::Logger.info("  #{workflow.states.join(' -> ')}")
+      
+      CircuitBreaker::Logger.info("\nAvailable transitions:")
+      workflow.transitions.each do |name, transition|
+        CircuitBreaker::Logger.info("  #{name}: #{transition[:from]} -> #{transition[:to]}")
+        CircuitBreaker::Logger.debug("  Full transition details:")
+        CircuitBreaker::Logger.debug("    Actions: #{transition[:actions].inspect}")
+        CircuitBreaker::Logger.debug("    Rules: #{transition[:rules].inspect}")
+        if transition[:actions].any?
+          CircuitBreaker::Logger.info("    Actions:")
+          transition[:actions].each do |tool, action|
+            CircuitBreaker::Logger.info("      - #{tool} => #{action}")
+          end
+        end
+        if transition[:rules]
+          if transition[:rules][:all]&.any?
+            CircuitBreaker::Logger.info("    Required rules:")
+            transition[:rules][:all].each do |rule|
+              CircuitBreaker::Logger.info("      - #{rule}")
+            end
+          end
+          if transition[:rules][:any]&.any?
+            CircuitBreaker::Logger.info("    Optional rules (at least one must pass):")
+            transition[:rules][:any].each do |rule|
+              CircuitBreaker::Logger.info("      - #{rule}")
+            end
+          end
+        end
+      end
+
+      loop do
+        CircuitBreaker::Logger.info("\nCurrent state: #{workflow.token.state}")
+        CircuitBreaker::Logger.info("Available actions:")
+        available = workflow.transitions.select { |_, t| t[:from] == workflow.token.state }
+        if available.empty?
+          CircuitBreaker::Logger.info("  No actions available - workflow is in final state")
+          break
+        end
+
+        available.each do |name, transition|
+          CircuitBreaker::Logger.info("  #{name}: transition to #{transition[:to]}")
+        end
+        CircuitBreaker::Logger.info("  exit: Exit the workflow")
+
+        print "\nEnter action: "
+        action = $stdin.tty? ? $stdin.gets.chomp : 'exit'
+        CircuitBreaker::Logger.debug("User input: #{action}")
+
+        break if action == 'exit'
+
+        if workflow.transitions.key?(action)
+          CircuitBreaker::Logger.info("\nExecuting transition '#{action}'...")
+          CircuitBreaker::Logger.debug("Current state: #{workflow.token.state}")
+          CircuitBreaker::Logger.debug("Target state: #{workflow.transitions[action][:to]}")
+          
+          result = workflow.transition(action).fire
+          if result[:success]
+            CircuitBreaker::Logger.info("Transition successful!")
+            CircuitBreaker::Logger.info("Results:")
+            result[:results].each do |action_name, action_result|
+              CircuitBreaker::Logger.info("  #{action_name}:")
+              if action_result.is_a?(Hash)
+                action_result.each do |key, value|
+                  if value.is_a?(Hash)
+                    CircuitBreaker::Logger.info("    #{key}:")
+                    value.each do |k, v|
+                      CircuitBreaker::Logger.info("      #{k}: #{v.inspect}")
+                    end
+                  else
+                    CircuitBreaker::Logger.info("    #{key}: #{value.inspect}")
+                  end
+                end
+              else
+                CircuitBreaker::Logger.info("    #{action_result.inspect}")
+              end
+            end
+            CircuitBreaker::Logger.debug("Full result: #{result.inspect}")
+          else
+            CircuitBreaker::Logger.error("Transition failed: #{result[:error]}")
+            CircuitBreaker::Logger.debug("Full error details: #{result.inspect}")
+          end
+
+          # Show updated state
+          CircuitBreaker::Logger.info("\nCurrent state: #{workflow.token.state}")
+          CircuitBreaker::Logger.info("Available actions:")
+          available = workflow.transitions.select { |_, t| t[:from] == workflow.token.state }
+          if available.empty?
+            CircuitBreaker::Logger.info("  No actions available - workflow is in final state")
+            break
+          end
+
+          available.each do |name, transition|
+            CircuitBreaker::Logger.info("  #{name}: transition to #{transition[:to]}")
+          end
+          CircuitBreaker::Logger.info("  exit: Exit the workflow")
+        else
+          CircuitBreaker::Logger.error("Invalid action: #{action}")
+        end
+      end
+    end
+
+    desc "version", "Show version information"
+    def version
+      puts "Circuit Breaker v0.1.0"
+    end
+
+    def self.exit_on_failure?
+      true
+    end
+  end
+end
+
+CircuitBreaker::CLI.start(ARGV)

@@ -1,0 +1,70 @@
+use {mock, log, rule} from "tools"
+
+token {
+    title: "Circuit Breaker Documentation",
+    content: "# Circuit Breaker Pattern\nA detailed explanation of the circuit breaker pattern and its implementation in distributed systems. This document covers the core concepts, configuration options, and best practices for using circuit breakers effectively. It includes examples of different failure scenarios and how circuit breakers help prevent cascading failures across microservices. The document also discusses important considerations such as timeout settings, failure thresholds, and recovery strategies. Additionally, it provides guidance on monitoring and maintaining circuit breakers in production environments.",
+    authorId: "author@example.com",
+    state: "draft"
+}
+
+states = ['draft', 'pending_review', 'reviewed', 'approved', 'rejected']
+
+workflow {
+    # The submit transition runs three analysis actions that each return detailed output:
+    # analyzeDocument returns:
+    # - wordCount: total number of words
+    # - analysis: { paragraphs, sentences, averageWordLength }
+    # analyzeClarity returns:
+    # - score: overall clarity score
+    # - clarity: { totalWords, complexWords, readabilityIndex, suggestions }
+    # analyzeCompleteness returns:
+    # - score: overall completeness score
+    # - completeness: { sections, paragraphs, hasSummary, hasConclusion, missingElements }
+    transition (submit, draft -> pending_review) {
+        actions {
+            mock => analyzeDocument
+            mock => analyzeClarity
+            mock => analyzeCompleteness
+        }
+        # The policy rules in document-rules.ts use the output from these actions.
+        # Required policies (all must pass):
+        # - valid_word_count checks wordCount >= 50, sentences >= 3
+        # - valid_clarity checks score >= 70, readabilityIndex >= 60
+        #
+        # Optional policies (at least one must pass):
+        # - has_summary checks if document contains a summary section
+        # - has_examples checks if document contains code examples
+        # - has_conclusion checks if document has a conclusion
+        policy {
+            all: [valid_word_count, valid_clarity],
+            any: [has_summary, has_examples, has_conclusion]
+        }
+    }
+
+    transition (review, pending_review -> reviewed) {
+        actions {
+            mock => reviewDocument
+        }
+        policy {
+            all: [valid_review]
+        }
+    }
+
+    transition (approve, reviewed -> approved) {
+        actions {
+            mock => finalizeDocument
+        }
+        policy {
+            all: [valid_approval]
+        }
+    }
+
+    transition (reject, reviewed -> rejected) {
+        actions {
+            mock => rejectDocument
+        }
+        policy {
+            all: [valid_rejection]
+        }
+    }
+}
